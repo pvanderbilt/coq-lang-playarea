@@ -120,10 +120,11 @@ Fixpoint evalF (t : tm) (e : rctx) (gas : nat) {struct gas} : ef_return :=
 
 with evalF' (t : tm) (e : rctx) (gas' : nat) {struct gas'} : ef_return :=
   match t with
-    | tvar x => match alookup x e with 
-                  | Some v => efr_normal v 
-                  | None => efr_stuck 
-                end
+    | tvar x => 
+      match alookup x e with 
+          | Some v => efr_normal v 
+          | None => efr_stuck 
+      end
     | tapp t1 t2 =>
         LETRT v1 <== evalF t1 e gas' IN
           LETRT v2 <== evalF t2 e gas' IN
@@ -149,10 +150,11 @@ Fixpoint evalF (t : tm) (e : rctx) (gas : nat) : ef_return :=
     | O => efr_nogas
     | S gas' => 
       match t with
-        | tvar x => match alookup x e with 
-                      | Some v => efr_normal v 
-                      | None => efr_stuck 
-                    end
+        | tvar x => 
+          match alookup x e with 
+            | Some v => efr_normal v 
+            | None => efr_stuck 
+          end
         | tapp t1 t2 =>
             LETRT v1 <== evalF t1 e gas' IN
               LETRT v2 <== evalF t2 e gas' IN
