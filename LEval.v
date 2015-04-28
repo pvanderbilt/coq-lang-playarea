@@ -111,6 +111,36 @@ Notation "'LETRT' x <== e1 'IN' e2"
        end)
    (right associativity, at level 60).
 
+Fixpoint evalF (t : tm) (e : rctx) (gas : nat) : ef_return :=
+  match gas with
+    | O => efr_nogas
+    | S gas' => 
+      match t with
+        | tvar x => 
+          match alookup x e with 
+            | Some v => efr_normal v 
+            | None => efr_stuck 
+          end
+        | tapp t1 t2 =>
+            LETRT v1 <== evalF t1 e gas' IN
+              LETRT v2 <== evalF t2 e gas' IN
+                match v1 with 
+                  | vabs tx tf te => evalF tf (acons tx v2 te) gas'
+                  | _ => efr_stuck
+                end
+        | tabs x T t => efr_normal (vabs x t e)
+        | ttrue => efr_normal vtrue
+        | tfalse => efr_normal vfalse
+        | tif tb t1 t2 => 
+            LETRT vb <== evalF tb e gas' IN
+              match vb with
+                | vtrue => evalF t1 e gas'
+                | vfalse => evalF t2 e gas'
+                | _ => efr_stuck
+              end
+      end
+  end.
+
 (* DOESN'T WORK :
 Fixpoint evalF (t : tm) (e : rctx) (gas : nat) {struct gas} : ef_return :=
   match gas with
@@ -144,35 +174,5 @@ with evalF' (t : tm) (e : rctx) (gas' : nat) {struct gas'} : ef_return :=
           end
   end.
 *)
-
-Fixpoint evalF (t : tm) (e : rctx) (gas : nat) : ef_return :=
-  match gas with
-    | O => efr_nogas
-    | S gas' => 
-      match t with
-        | tvar x => 
-          match alookup x e with 
-            | Some v => efr_normal v 
-            | None => efr_stuck 
-          end
-        | tapp t1 t2 =>
-            LETRT v1 <== evalF t1 e gas' IN
-              LETRT v2 <== evalF t2 e gas' IN
-                match v1 with 
-                  | vabs tx tf te => evalF tf (acons tx v2 te) gas'
-                  | _ => efr_stuck
-                end
-        | tabs x T t => efr_normal (vabs x t e)
-        | ttrue => efr_normal vtrue
-        | tfalse => efr_normal vfalse
-        | tif tb t1 t2 => 
-            LETRT vb <== evalF tb e gas' IN
-              match vb with
-                | vtrue => evalF t1 e gas'
-                | vfalse => evalF t2 e gas'
-                | _ => efr_stuck
-              end
-      end
-  end.
 
 End LEVAL.
