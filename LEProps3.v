@@ -94,7 +94,7 @@ Proof. admit. Qed.
 
 (** ** lemmas, COPIED from LEProps1 because not in module *)
 
-Lemma ctxts_agree__has_type : 
+Lemma ctxts_gx_then_alookup : 
   forall (x : id) (G : context) (g : rctx) (T : ty),
     g  :::* G -> 
     G x = Some T ->
@@ -112,26 +112,26 @@ Proof.
           assumption.
 Qed.
 
-Lemma gamma_var_T : forall G x T,
+Lemma ctx_tvar_then_some : forall G x T,
   G |- (tvar x) \in T -> G x = Some T.
 Proof. introv H. inversion H. auto. Qed.
 
-Lemma alookup_var_T : forall G x T g,
+Lemma ctx_tvar_then_alookup : forall G x T g,
   G |- (tvar x) \in T -> g :::* G -> 
     exists v, alookup x g = Some v /\ v ::: T.
 Proof. 
-  introv HG Hg. apply (ctxts_agree__has_type x G g T Hg). 
-  apply gamma_var_T. assumption. 
+  introv HG Hg. apply (ctxts_gx_then_alookup x G g T Hg). 
+  apply ctx_tvar_then_some. assumption. 
 Qed.
 
 (** *** END OF COPY *)
 
 (** ** Lemma for reasoning about  (tvar x) / g =>: T. *)
 
-Lemma evalF_var_T : forall G x T g,
+Lemma ctx_tvar_then_evalsto : forall G x T g,
   G |- (tvar x) \in T -> g :::* G -> (tvar x) / g =>: T.
 Proof. 
-  introv HG Hg. destruct (alookup_var_T G x T g HG Hg) as [v [Hl Hv]]. 
+  introv HG Hg. destruct (ctx_tvar_then_alookup G x T g HG Hg) as [v [Hl Hv]]. 
   apply TVE. intro n. destruct n as [ | n' ].
     simpl. apply TR_NG.
     simpl. rewrite Hl.
@@ -180,7 +180,7 @@ Proof.
   (* introv Hty HGg. generalize dependent G. generalize dependent g. generalize dependent T. *)
   t_cases (induction t as [ x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) Case; introv Hty HGg.
 
-  Case "tvar". apply (evalF_var_T G x T g Hty HGg).
+  Case "tvar". apply (ctx_tvar_then_evalsto G x T g Hty HGg).
 
   Case "tapp".
     inverts Hty.

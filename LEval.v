@@ -31,12 +31,12 @@ Fixpoint alookup {T: Type} (x: id) (a : alist T) : option T :=
   match a with
     | anil => None
     | acons y t r => if eq_id_dec y x then (Some t) else (alookup x r)
-    end.
+  end.
 
 Fixpoint amap {T V: Type} (f: T -> V) (a: alist T) : alist V :=
   match a with
-  | anil => anil
-  | acons x t r => acons x (f t) (amap f r)
+    | anil => anil
+    | acons x t r => acons x (f t) (amap f r)
   end.
 
 
