@@ -1,4 +1,4 @@
-MODULES := LDef LProps LEval Tests Tests2 LEProps LEProps3
+MODULES := LDef LProps LEval Tests Tests2 LEProps LEProps3 Utils
 VS      := $(MODULES:%=%.v)
 PSF			:= ../../Coq/pierce_software_foundations_3.2
 
@@ -19,4 +19,4 @@ html:: Makefile.coq
 
 # A private rule to keep a copy of .v files in Dropbox.
 rsync:
-	rsync --itemize-changes --times --progress *.v ~/Dropbox/Research/coq
+	rsync --itemize-changes --times --progress *.v Makefile README.md ~/Dropbox/Research/coq

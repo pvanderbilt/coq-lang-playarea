@@ -49,3 +49,10 @@ Additional files are:
 - [LProps.v](LProps.v): Pierce's StlcProp.v.
 - [Tests.v](Tests.v): The examples factored out of Pierce's Stlc.v.
 - [Tests2.v](Tests2.v): Tests of the big-step evaluation relations of [LEval.v](LEval.v).
+
+There is also a file [Utils.v](Utils.v) that has some useful tactics (and related lemmas):
+
+- Two tactics that deal with hypotheses of the form `H:P->Q` or `H:forall x, P->Q` 
+	(where `Q` does not match the goal) by generating `P` as a subgoal, with `x` as an
+	"existential" variable in the second case.
+- A tactic for simplifying terms contained in a hypothesis.
