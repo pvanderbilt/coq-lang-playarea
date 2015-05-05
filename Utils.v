@@ -1,4 +1,5 @@
-(** Some utlities, primarily theorems and tactics, to help with theorem proving  *)
+(** This library contains some utlities, 
+     primarily theorems and tactics, to help with theorem proving  *)
 
 Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
@@ -19,7 +20,7 @@ Module PVUTILS.
 
 Theorem MP2 : forall P Q R : Prop, (P->Q) -> P -> (Q->R) -> R.
 Proof. 
-     exact (fun _ _ _ Hpq Hp Hqr => Hqr (Hpq Hp)).
+  exact (fun _ _ _ Hpq Hp Hqr => Hqr (Hpq Hp)).
 Qed.
 
 (* Alternate definitions: 
@@ -152,7 +153,8 @@ Ltac simplify_term_in t H :=
   apply (TH_simplify_term_in _ t _ ); eexists; split; 
     [ | intro Ht; rewrite Ht in H; clear Ht].
 
-(** An example of using [simplify_term_in]: *)
+(** An example of using [simplify_term_in] 
+  (where the [simpl (f 10) in HC] tactic doesn't do anything): *)
 
 Example sti_ex1 : 
   forall (f g : nat -> nat), 
@@ -161,7 +163,7 @@ Example sti_ex1 :
       f 10 <> g 7.
 Proof.
   intros f g Df Dg HC.
-     simpl (f 10) in HC. (* doesn't do anything *)
+     simpl (f 10) in HC.
      simplify_term_in (f 10) HC. rewrite Df. simpl. reflexivity.
      simplify_term_in (g 7) HC. rewrite Dg. simpl. reflexivity.
     inversion HC.

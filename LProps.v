@@ -1,7 +1,7 @@
 (** * LProps: Properties of LDef *)
 
-(** This file develops the type safety theorem.
-    It is based on Pierce's StlcProp.v. *)
+(** This file develops the type safety theorem for the small-step semantics of LDef.v.
+    It is currently just Pierce's StlcProp.v. *)
 
 Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
@@ -35,8 +35,8 @@ Proof.
       inversion HT; subst; clear HT. exists x0. exists t0.  auto.
       inversion HT. 
       inversion HT. 
-*)
-  inversion HVal; subst; inversion HT; subst; clear HVal HT. (* my version *)
+  my version:*)
+  inversion HVal; subst; inversion HT; subst; clear HVal HT.
   (* inversion HVal; intros; subst; try inversion HT; subst; auto. -- original *)
   exists x t0.  auto.
 Qed.
@@ -45,17 +45,16 @@ Qed.
 (* ###################################################################### *)
 (** ** Progress *)
 
-(** As before, the _progress_ theorem tells us that closed, well-typed
+(** The _progress_ theorem tells us that closed, well-typed
     terms are not stuck: either a well-typed term is a value, or it
-    can take an evaluation step.  The proof is a relatively
-    straightforward extension of the progress proof we saw in the
-    [Types] chapter. *)
+    can take an evaluation step.  
+  The proof is by induction on the derivation of [|- t \in T]. *)
 
 Theorem progress : forall t T, 
      empty |- t \in T ->
      value t \/ exists t', t ==> t'.
 
-(** _Proof_: by induction on the derivation of [|- t \in T].
+(** _Proof_: 
 
     - The last rule of the derivation cannot be [T_Var], since a
       variable is never well typed in an empty context.
@@ -112,7 +111,8 @@ Proof with eauto.
       destruct IHHt2...
       SSCase "t2 is also a value".
         apply canonical_forms_fun in Ht1.
-          destruct Ht1 as [x0 [t0 Heq]]. subst. eexists. apply ST_AppAbs. assumption.
+          destruct Ht1 as [x0 [t0 Heq]]. subst. eexists. 
+            apply ST_AppAbs. assumption.
           assumption.
         (* original: 
         assert (exists x0 t0, t1 = tabs x0 T11 t0).
@@ -133,7 +133,7 @@ Proof with eauto.
 
   Case "T_If".
     right. destruct IHHt1...
-    
+
     SCase "t1 is a value".
       destruct (canonical_forms_bool t1); subst; eauto.
 
@@ -141,8 +141,7 @@ Proof with eauto.
       inversion H as [t1' Hstp]. exists (tif t1' t2 t3)...
 Qed.
 
-(** **** Exercise: 3 stars, optional (progress_from_term_ind)  *)
-(** Show that progress can also be proved by induction on terms
+(** (Exercise: 3 ) A proof that progress can also be proved by induction on terms
     instead of induction on typing derivations. *)
 
 Theorem progress' : forall t T,
@@ -153,70 +152,33 @@ Proof.
   t_cases (induction t) Case; intros T Ht; auto.
   (* FILLED IN  *)
     Case "tvar". inversion Ht. inversion H1.
-    Case "tapp". right. inversion Ht; subst; clear Ht. destruct IHt1 with (T:=TArrow T11 T).
-      (* t1 : T11-->T *) apply H2.
+    Case "tapp". right. inversion Ht; subst; clear Ht. 
+        destruct IHt1 with (T:=TArrow T11 T).  (* t1 : T11-->T *) apply H2.
       SCase "value t1". apply IHt2 in H4. clear IHt2. destruct H4.
-        SSCase "value t2". apply canonical_forms_fun in H2. destruct H2 as [x0 [t0 Heq]]. subst.
-         eexists. apply ST_AppAbs. assumption. assumption.
-        SSCase " t2 ==> t' ". destruct H0 as [t2' Ht2]. eexists. apply ST_App2. assumption. eassumption.
-      SCase "t1==>t1'". destruct H as [t1' Ht1]. eexists. apply ST_App1. eassumption.
-    Case "tif". right. inversion Ht; subst; clear Ht. destruct IHt1 with (T:=TBool). apply H3.
+        SSCase "value t2". apply canonical_forms_fun in H2. 
+          destruct H2 as [x0 [t0 Heq]]. subst.
+          eexists. apply ST_AppAbs. assumption. assumption.
+        SSCase " t2 ==> t' ". destruct H0 as [t2' Ht2]. eexists. 
+          apply ST_App2. assumption. eassumption.
+      SCase "t1==>t1'". destruct H as [t1' Ht1]. eexists. 
+        apply ST_App1. eassumption.
+    Case "tif". right. inversion Ht; subst; clear Ht. 
+          destruct IHt1 with (T:=TBool). apply H3.
       SCase "value t1". apply canonical_forms_bool in H3. destruct H3; subst.
         SSCase "t1 = ttrue". eexists. apply ST_IfTrue.
         SSCase "t1 = tfalse". eexists. apply ST_IfFalse.
         apply H.
-    SCase "t1==>t1'". destruct H as [t1' Ht1]. eexists. apply ST_If. eassumption.
+      SCase "t1==>t1'". destruct H as [t1' Ht1]. eexists. 
+        apply ST_If. eassumption.
 Qed.
 (** [] *)
 
 (* ###################################################################### *)
 (** ** Preservation *)
 
-(** The other half of the type soundness property is the preservation
-    of types during reduction.  For this, we need to develop some
-    technical machinery for reasoning about variables and
-    substitution.  Working from top to bottom (the high-level property
-    we are actually interested in to the lowest-level technical lemmas
-    that are needed by various cases of the more interesting proofs),
-    the story goes like this:
-
-      - The _preservation theorem_ is proved by induction on a typing
-        derivation, pretty much as we did in the [Types] chapter.  The
-        one case that is significantly different is the one for the
-        [ST_AppAbs] rule, which is defined using the substitution
-        operation.  To see that this step preserves typing, we need to
-        know that the substitution itself does.  So we prove a...
-
-      - _substitution lemma_, stating that substituting a (closed)
-        term [s] for a variable [x] in a term [t] preserves the type
-        of [t].  The proof goes by induction on the form of [t] and
-        requires looking at all the different cases in the definition
-        of substitition.  This time, the tricky cases are the ones for
-        variables and for function abstractions.  In both cases, we
-        discover that we need to take a term [s] that has been shown
-        to be well-typed in some context [Gamma] and consider the same
-        term [s] in a slightly different context [Gamma'].  For this
-        we prove a...
-
-      - _context invariance_ lemma, showing that typing is preserved
-        under "inessential changes" to the context [Gamma] -- in
-        particular, changes that do not affect any of the free
-        variables of the term.  For this, we need a careful definition
-        of
-
-      - the _free variables_ of a term -- i.e., the variables occuring
-        in the term that are not in the scope of a function
-        abstraction that binds them.
-*)
 
 (* ###################################################################### *)
 (** *** Free Occurrences *)
-
-(** A variable [x] _appears free in_ a term _t_ if [t] contains some
-    occurrence of [x] that is not under an abstraction labeled [x].  For example: 
-      - [y] appears free, but [x] does not, in [\x:T->U. x y] 
-      - both [x] and [y] appear free in [(\x:T->U. x y) x] 
-      - no variables appear free in [\x:T->U. \y:T. x y]  *)
 
 Inductive appears_free_in : id -> tm -> Prop :=
   | afi_var : forall x,
@@ -257,44 +219,11 @@ Definition closed (t:tm) :=
 (* ###################################################################### *)
 (** *** Substitution *)
 
-(** We first need a technical lemma connecting free variables and
-    typing contexts.  If a variable [x] appears free in a term [t],
-    and if we know [t] is well typed in context [Gamma], then it must
-    be the case that [Gamma] assigns a type to [x]. *)
-
 Lemma free_in_context : forall x t T Gamma,
    appears_free_in x t ->
    Gamma |- t \in T ->
    exists T', Gamma x = Some T'.
 
-(** _Proof_: We show, by induction on the proof that [x] appears free
-      in [t], that, for all contexts [Gamma], if [t] is well typed
-      under [Gamma], then [Gamma] assigns some type to [x].
-
-      - If the last rule used was [afi_var], then [t = x], and from
-        the assumption that [t] is well typed under [Gamma] we have
-        immediately that [Gamma] assigns a type to [x].
-
-      - If the last rule used was [afi_app1], then [t = t1 t2] and [x]
-        appears free in [t1].  Since [t] is well typed under [Gamma],
-        we can see from the typing rules that [t1] must also be, and
-        the IH then tells us that [Gamma] assigns [x] a type.
-
-      - Almost all the other cases are similar: [x] appears free in a
-        subterm of [t], and since [t] is well typed under [Gamma], we
-        know the subterm of [t] in which [x] appears is well typed
-        under [Gamma] as well, and the IH gives us exactly the
-        conclusion we want.
-
-      - The only remaining case is [afi_abs].  In this case [t =
-        \y:T11.t12], and [x] appears free in [t12]; we also know that
-        [x] is different from [y].  The difference from the previous
-        cases is that whereas [t] is well typed under [Gamma], its
-        body [t12] is well typed under [(Gamma, y:T11)], so the IH
-        allows us to conclude that [x] is assigned some type by the
-        extended context [(Gamma, y:T11)].  To conclude that [Gamma]
-        assigns a type to [x], we appeal to lemma [extend_neq], noting
-        that [x] and [y] are different variables. *)
 
 Proof.
   intros x t T Gamma H H0. generalize dependent Gamma. 
@@ -310,71 +239,21 @@ Qed.
 (** Next, we'll need the fact that any term [t] which is well typed in
     the empty context is closed -- that is, it has no free variables. *)
 
-(** **** Exercise: 2 stars, optional (typable_empty__closed)  *)
+(** ** (Exercise: 2 stars, optional (typable_empty__closed))  *)
 Corollary typable_empty__closed : forall t T, 
     empty |- t \in T  ->
     closed t.
 Proof.
   (* FILLED IN *) 
   intros t T Hin x Hfree.
-  apply free_in_context with (T:=T) (Gamma:=empty) in Hfree. destruct Hfree. inversion H. assumption.
+  apply free_in_context with (T:=T) (Gamma:=empty) in Hfree. 
+  destruct Hfree. inversion H. assumption.
 Qed.
-(** [] *)
-
-(** Sometimes, when we have a proof [Gamma |- t : T], we will need to
-    replace [Gamma] by a different context [Gamma'].  When is it safe
-    to do this?  Intuitively, it must at least be the case that
-    [Gamma'] assigns the same types as [Gamma] to all the variables
-    that appear free in [t]. In fact, this is the only condition that
-    is needed. *)
 
 Lemma context_invariance : forall Gamma Gamma' t T,
      Gamma |- t \in T  ->
      (forall x, appears_free_in x t -> Gamma x = Gamma' x) ->
      Gamma' |- t \in T.
-
-(** _Proof_: By induction on the derivation of [Gamma |- t \in T].
-
-      - If the last rule in the derivation was [T_Var], then [t = x]
-        and [Gamma x = T].  By assumption, [Gamma' x = T] as well, and
-        hence [Gamma' |- t \in T] by [T_Var].
-
-      - If the last rule was [T_Abs], then [t = \y:T11. t12], with [T
-        = T11 -> T12] and [Gamma, y:T11 |- t12 \in T12].  The induction
-        hypothesis is that for any context [Gamma''], if [Gamma,
-        y:T11] and [Gamma''] assign the same types to all the free
-        variables in [t12], then [t12] has type [T12] under [Gamma''].
-        Let [Gamma'] be a context which agrees with [Gamma] on the
-        free variables in [t]; we must show [Gamma' |- \y:T11. t12 \in
-        T11 -> T12].
-
-        By [T_Abs], it suffices to show that [Gamma', y:T11 |- t12 \in
-        T12].  By the IH (setting [Gamma'' = Gamma', y:T11]), it
-        suffices to show that [Gamma, y:T11] and [Gamma', y:T11] agree
-        on all the variables that appear free in [t12].  
-
-        Any variable occurring free in [t12] must either be [y], or
-        some other variable.  [Gamma, y:T11] and [Gamma', y:T11]
-        clearly agree on [y].  Otherwise, we note that any variable
-        other than [y] which occurs free in [t12] also occurs free in
-        [t = \y:T11. t12], and by assumption [Gamma] and [Gamma']
-        agree on all such variables, and hence so do [Gamma, y:T11]
-        and [Gamma', y:T11].
-
-      - If the last rule was [T_App], then [t = t1 t2], with [Gamma |-
-        t1 \in T2 -> T] and [Gamma |- t2 \in T2].  One induction
-        hypothesis states that for all contexts [Gamma'], if [Gamma']
-        agrees with [Gamma] on the free variables in [t1], then [t1]
-        has type [T2 -> T] under [Gamma']; there is a similar IH for
-        [t2].  We must show that [t1 t2] also has type [T] under
-        [Gamma'], given the assumption that [Gamma'] agrees with
-        [Gamma] on all the free variables in [t1 t2].  By [T_App], it
-        suffices to show that [t1] and [t2] each have the same type
-        under [Gamma'] as under [Gamma].  However, we note that all
-        free variables in [t1] are also free in [t1 t2], and similarly
-        for free variables in [t2]; hence the desired result follows
-        by the two IHs.
-*)
 
 Proof with eauto.
   intros. 
@@ -392,18 +271,6 @@ Proof with eauto.
     apply T_App with T11...  
 Qed.
 
-(** Now we come to the conceptual heart of the proof that reduction
-    preserves types -- namely, the observation that _substitution_
-    preserves types.
-
-    Formally, the so-called _Substitution Lemma_ says this: suppose we
-    have a term [t] with a free variable [x], and suppose we've been
-    able to assign a type [T] to [t] under the assumption that [x] has
-    some type [U].  Also, suppose that we have some other term [v] and
-    that we've shown that [v] has type [U].  Then, since [v] satisfies
-    the assumption we made about [x] when typing [t], we should be
-    able to substitute [v] for each of the occurrences of [x] in [t]
-    and obtain a new term that still has type [T]. *)
 
 (** _Lemma_: If [Gamma,x:U |- t \in T] and [|- v \in U], then [Gamma |-
     [x:=v]t \in T]. *)
@@ -421,63 +288,7 @@ Lemma substitution_preserves_typing : forall Gamma x U t v T,
     because the context invariance lemma then tells us that [v] has
     type [U] in any context at all -- we don't have to worry about
     free variables in [v] clashing with the variable being introduced
-    into the context by [T_Abs].
-
-    _Proof_: We prove, by induction on [t], that, for all [T] and
-    [Gamma], if [Gamma,x:U |- t \in T] and [|- v \in U], then [Gamma |-
-    [x:=v]t \in T].
- 
-      - If [t] is a variable, there are two cases to consider, depending
-        on whether [t] is [x] or some other variable.
-
-          - If [t = x], then from the fact that [Gamma, x:U |- x \in T] we
-            conclude that [U = T].  We must show that [[x:=v]x = v] has
-            type [T] under [Gamma], given the assumption that [v] has
-            type [U = T] under the empty context.  This follows from
-            context invariance: if a closed term has type [T] in the
-            empty context, it has that type in any context.
-
-          - If [t] is some variable [y] that is not equal to [x], then
-            we need only note that [y] has the same type under [Gamma,
-            x:U] as under [Gamma].
-
-      - If [t] is an abstraction [\y:T11. t12], then the IH tells us,
-        for all [Gamma'] and [T'], that if [Gamma',x:U |- t12 \in T']
-        and [|- v \in U], then [Gamma' |- [x:=v]t12 \in T'].
-
-        The substitution in the conclusion behaves differently,
-        depending on whether [x] and [y] are the same variable name.
-
-        First, suppose [x = y].  Then, by the definition of
-        substitution, [[x:=v]t = t], so we just need to show [Gamma |-
-        t \in T].  But we know [Gamma,x:U |- t : T], and since the
-        variable [y] does not appear free in [\y:T11. t12], the
-        context invariance lemma yields [Gamma |- t \in T].
-
-        Second, suppose [x <> y].  We know [Gamma,x:U,y:T11 |- t12 \in
-        T12] by inversion of the typing relation, and [Gamma,y:T11,x:U
-        |- t12 \in T12] follows from this by the context invariance
-        lemma, so the IH applies, giving us [Gamma,y:T11 |- [x:=v]t12 \in
-        T12].  By [T_Abs], [Gamma |- \y:T11. [x:=v]t12 \in T11->T12], and
-        by the definition of substitution (noting that [x <> y]),
-        [Gamma |- \y:T11. [x:=v]t12 \in T11->T12] as required.
-
-      - If [t] is an application [t1 t2], the result follows
-        straightforwardly from the definition of substitution and the
-        induction hypotheses.
-
-      - The remaining cases are similar to the application case.
-
-    Another technical note: This proof is a rare case where an
-    induction on terms, rather than typing derivations, yields a
-    simpler argument.  The reason for this is that the assumption
-    [extend Gamma x U |- t \in T] is not completely generic, in
-    the sense that one of the "slots" in the typing relation -- namely
-    the context -- is not just a variable, and this means that Coq's
-    native induction tactic does not give us the induction hypothesis
-    that we want.  It is possible to work around this, but the needed
-    generalization is a little tricky.  The term [t], on the other
-    hand, _is_ completely generic. *)
+    into the context by [T_Abs]. *)
 
 Proof with eauto.
   intros Gamma x U t v T Ht Ht'.
@@ -491,8 +302,9 @@ Proof with eauto.
       subst. 
       rewrite extend_eq in H2.
       inversion H2; subst. clear H2.
-                  eapply context_invariance... intros x Hcontra.
-      destruct (free_in_context _ _ T empty Hcontra Ht') as [T' HT']. (* added Ht' & removed .. *)
+      eapply context_invariance... intros x Hcontra.
+      (* added Ht' & removed .. *)
+      destruct (free_in_context _ _ T empty Hcontra Ht') as [T' HT']. 
       inversion HT'.
     SCase "x<>y".
       apply T_Var. rewrite extend_neq in H2... 
@@ -522,48 +334,17 @@ Qed.
 (* ###################################################################### *)
 (** *** Main Theorem *)
 
-(** We now have the tools we need to prove preservation: if a closed
+(** Preservation: if a closed
     term [t] has type [T], and takes an evaluation step to [t'], then [t']
     is also a closed term with type [T].  In other words, the small-step
     evaluation relation preserves types.
+    Proof by induction on the derivation of [|- t \in T].
 *)
 
 Theorem preservation : forall t t' T,
      empty |- t \in T  ->
      t ==> t'  ->
      empty |- t' \in T.
-
-(** _Proof_: by induction on the derivation of [|- t \in T].
-
-    - We can immediately rule out [T_Var], [T_Abs], [T_True], and
-      [T_False] as the final rules in the derivation, since in each of
-      these cases [t] cannot take a step.
-
-    - If the last rule in the derivation was [T_App], then [t = t1
-      t2].  There are three cases to consider, one for each rule that
-      could have been used to show that [t1 t2] takes a step to [t'].
-
-        - If [t1 t2] takes a step by [ST_App1], with [t1] stepping to
-          [t1'], then by the IH [t1'] has the same type as [t1], and
-          hence [t1' t2] has the same type as [t1 t2].
-
-        - The [ST_App2] case is similar.
-
-        - If [t1 t2] takes a step by [ST_AppAbs], then [t1 =
-          \x:T11.t12] and [t1 t2] steps to [[x:=t2]t12]; the
-          desired result now follows from the fact that substitution
-          preserves types.
-
-    - If the last rule in the derivation was [T_If], then [t = if t1
-      then t2 else t3], and there are again three cases depending on
-      how [t] steps.
-
-        - If [t] steps to [t2] or [t3], the result is immediate, since
-          [t2] and [t3] have the same type as [t].
-
-        - Otherwise, [t] steps by [ST_If], and the desired conclusion
-          follows directly from the induction hypothesis.
-*)
 
 Proof with eauto.
   remember (@empty ty) as Gamma.
@@ -588,9 +369,7 @@ Qed.
 (* ###################################################################### *)
 (** ** Type Soundness *)
 
-(** **** Exercise: 2 stars, optional (type_soundness)  *)
-
-(** Put progress and preservation together and show that a well-typed
+(** Progress and preservation together imply that a well-typed
     term can _never_ reach a stuck state.  *)
 
 Definition normal_form {X:Type} (R:relation X) (t:X) : Prop :=
@@ -607,8 +386,10 @@ Proof.
   intros t t' T Hhas_type Hmulti. unfold stuck.
   intros [Hnf Hnot_val]. unfold normal_form in Hnf.
   induction Hmulti   (* FILLED IN  *)  as [ x | x y z ].
-    Case "multi_refl: x==>x". apply progress in Hhas_type. destruct Hhas_type; auto.
-    Case "multi_step: x==>y, y==>*z". apply IHHmulti; try assumption.
+    Case "multi_refl: x==>x". 
+      apply progress in Hhas_type. destruct Hhas_type; auto.
+    Case "multi_step: x==>y, y==>*z". 
+      apply IHHmulti; try assumption.
       eapply preservation.
         apply Hhas_type.
         assumption.
@@ -617,15 +398,11 @@ Qed.
 (* ###################################################################### *)
 (** ** Uniqueness of Types *)
 
-(** **** Exercise: 3 stars (types_unique)  *)
 (** Another pleasant property of the STLC is that types are
     unique: a given term (in a given context) has at most one
-    type. *)
-(** Formalize this statement and prove it. *)
+    type.  
 
+    (Exercise) TBD: Formalize this statement and prove it. *)
 (* FILL IN HERE *)
-(** [] *)
-
-
 
 End LDefProps.

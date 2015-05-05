@@ -1,6 +1,10 @@
-(** * LEProps3: Properties of LEval (a big-step semantics for LDef) *)
+(** * An attempt at soundness of [evalF]  
+    This file contains an attempt at proving the soundness of [evalF] 
+    (the big-step evaluation function defined in [Leval.v]).
+    However, a key definition is not allowed due to Coq's positivity restriction.
 
-(**  V3: An attempt at progress of evalF.  Incomplete Proofs.*)
+    To get around this, lemmas are defined to fake the desired definition
+    and a proof goes through.*)
 
 Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
@@ -19,36 +23,41 @@ Reserved Notation "g ':::*' G" (at level 40).
 Reserved Notation "t '/' g '=>:' T" (at level 40, g at level 39).
 
 
-(** The definitions below define relations that relate evalF, values and types.
-    However, they don't work.  In value_has_type, I want 
+(** The definitions below define relations that relate [evalF], values and types.
+    However, they don't work.  In the [TV_Abs] case of [value_has_type], I want 
 
-  | TV_Abs : forall xf tb gf T1 T2,
-        ( forall va,  va ::: T1 -> tb / (acons xf va gf) =>: T2 ) ->
-               vabs xf tb gf ::: TArrow T1 T2
+[[
+  forall xf tb gf T1 T2,
+    ( forall va,  va ::: T1 -> tb / (acons xf va gf) =>: T2 ) ->
+      vabs xf tb gf ::: TArrow T1 T2
+]]
 
-    However, this isn't accepted because of a "Non strictly positive occurrence".
+    However, this isn't accepted because of a "Non strictly positive occurrence" error
+    due to [va ::: T1 ] being to the left of an implication.
     Below I provide lemmas that fake this behavior, and it seems that the soundness proof goes through.
 
     Some alternative that I've tried:
 
-     *  (exists (Gf : context), gf :::* Gf /\ extend Gf xf T1 |- tb \in T2) ->
-               vabs xf tb gf ::: TArrow T1 T2
-        This is accepted but gets to a state in the tapp case where the context has:
-            Hv2t : v2 ::: T11
-            Hevf : evalF tb (acons xf v2 gf) n' = erf
-            HGgf : gf :::* Gf
-            Htbt : extend Gf xf T11 |- tb \in T
-        It seems that this needs the inductive hyptohesis from the tabs case.
+     -  [(exists Gf , gf :::* Gf /\ extend Gf xf T1 |- tb \in T2) ->]#<br/>#
+        [    vabs xf tb gf ::: TArrow T1 T2]
 
-     *  (exists (Gf : context), gf :::* Gf /\ Gf |- (tabs xf T1 tb) \in TArrow T1 T2 ) -> ...
+        This is accepted but gets to a state in the [tapp] case where the context has:
+            - [Hv2t : v2 ::: T11]
+            - [Hevf : evalF tb (acons xf v2 gf) n' = erf]
+            - [HGgf : gf :::* Gf]
+            - [Htbt : extend Gf xf T11 |- tb \in T]
+        It seems that this needs the inductive hypothesis from the [tabs] case.
+
+     -  [(exists Gf, gf :::* Gf /\ Gf |- (tabs xf T1 tb) \in TArrow T1 T2 ) -> ...]
+
         This is accepted but is similar to the one above.
 
-     *  ( forall ta G g va n, G |- ta \in T1 ->  g :::* G ->  evalF ta g n = efr_normal va -> 
-              tb / (acons xf va gf) =>: T2 ) -> ...
-        This is not accepted because of the gf :::* Gf clause. 
+     -  [( forall ta G g va n, G |- ta \in T1 ->  g :::* G -> ]#<br/>#
+          [    evalF ta g n = efr_normal va -> ]#<br/>#
+          [    tb / (acons xf va gf) =>: T2 ) -> ...]
+
+        This is not accepted because of the [gf :::* Gf ]clause. 
         This makes sense as the first line is another way to say [va ::: T1] (given soundness).
-
-
 *)
 
 Inductive value_has_type : evalue -> ty -> Prop :=
@@ -124,7 +133,7 @@ Proof.
   apply ctx_tvar_then_some. assumption. 
 Qed.
 
-(** *** END OF COPY *)
+(* END OF COPY *)
 
 (** ** Lemma for reasoning about  (tvar x) / g =>: T. *)
 

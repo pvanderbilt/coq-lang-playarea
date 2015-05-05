@@ -1,6 +1,7 @@
 (** * LEval: A big-step semantics for LDef *)
 
-(**  An eval relation (a big step semantics) is defined for LDef. *)
+(**  This file defines a "big-step" evaluation relation and function 
+      for the language defined in LDef.v. *)
 
 Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
@@ -52,7 +53,7 @@ Inductive evalue : Type :=
 
 Definition rctx := alist evalue.
 
-Reserved Notation "e '/' g '||' n" (at level 40, g at level 39).
+Reserved Notation "t '/' g '||' v" (at level 40, g at level 39).
 
 Inductive eval : tm -> rctx -> evalue -> Prop :=
   | E_Var : forall x c v,
@@ -82,12 +83,12 @@ with eval_bool : evalue -> tm -> tm -> rctx -> evalue -> Prop :=
   | EB_true : forall tt te c v, tt / c || v -> eval_bool vtrue tt te c v
   | EB_false : forall tt te c v, te / c || v -> eval_bool vfalse tt te c v
 
-where "e '/' g '||' n" := (eval e g n) : type_scope.
+where "t '/' g '||' v" := (eval t g v) : type_scope.
 
 Tactic Notation "eval_cases" tactic(first) ident(c) :=
   first;
-  [ Case_aux c "E_Var" | Case_aux c "E_Abs"  | Case_aux c "E_App"  | Case_aux c "E_True" 
-    | Case_aux c "E_False"  | Case_aux c "E_If"  ].
+  [ Case_aux c "E_Var" | Case_aux c "E_Abs"  | Case_aux c "E_App"  
+  | Case_aux c "E_True" | Case_aux c "E_False"  | Case_aux c "E_If"  ].
     (* | Case_aux c "E_If_True"  | Case_aux c "E_If_False" *)
 
 Hint Constructors eval apply eval_bool.
@@ -96,68 +97,71 @@ Hint Constructors eval apply eval_bool.
 (**  ** The evalF function for big-step semantics *)
 
 (** *** Return type *)
+
 Inductive ef_return : Type :=
   | efr_normal : evalue -> ef_return
   | efr_nogas : ef_return
   | efr_stuck : ef_return .
 
-(** *** Function evalF *)
+(** *** [LETRT] notation *)
 
-Notation "'LETRT' x <== e1 'IN' e2" 
-   := (match e1 with
-         | efr_normal x => e2
+Notation "'LETRT' x <== er1 'IN' er2" 
+   := (match er1 with
+         | efr_normal x => er2
          | efr_nogas => efr_nogas
          | efr_stuck => efr_stuck
        end)
    (right associativity, at level 60).
 
-Fixpoint evalF (t : tm) (e : rctx) (gas : nat) : ef_return :=
+(** *** Function [evalF] *)
+
+Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
   match gas with
     | O => efr_nogas
     | S gas' => 
       match t with
         | tvar x => 
-          match alookup x e with 
+          match alookup x g with 
             | Some v => efr_normal v 
             | None => efr_stuck 
           end
         | tapp t1 t2 =>
-            LETRT v1 <== evalF t1 e gas' IN
-              LETRT v2 <== evalF t2 e gas' IN
+            LETRT v1 <== evalF t1 g gas' IN
+              LETRT v2 <== evalF t2 g gas' IN
                 match v1 with 
                   | vabs tx tf te => evalF tf (acons tx v2 te) gas'
                   | _ => efr_stuck
                 end
-        | tabs x T t => efr_normal (vabs x t e)
+        | tabs x T t => efr_normal (vabs x t g)
         | ttrue => efr_normal vtrue
         | tfalse => efr_normal vfalse
         | tif tb t1 t2 => 
-            LETRT vb <== evalF tb e gas' IN
+            LETRT vb <== evalF tb g gas' IN
               match vb with
-                | vtrue => evalF t1 e gas'
-                | vfalse => evalF t2 e gas'
+                | vtrue => evalF t1 g gas'
+                | vfalse => evalF t2 g gas'
                 | _ => efr_stuck
               end
       end
   end.
 
 (* DOESN'T WORK :
-Fixpoint evalF (t : tm) (e : rctx) (gas : nat) {struct gas} : ef_return :=
+Fixpoint evalF (t : tm) (g : rctx) (gas : nat) {struct gas} : ef_return :=
   match gas with
     | O => efr_nogas
-    | S gas' => evalF' t e gas'
+    | S gas' => evalF' t g gas'
   end
 
 with evalF' (t : tm) (e : rctx) (gas' : nat) {struct gas'} : ef_return :=
   match t with
     | tvar x => 
-      match alookup x e with 
+      match alookup x g with 
           | Some v => efr_normal v 
           | None => efr_stuck 
       end
     | tapp t1 t2 =>
-        LETRT v1 <== evalF t1 e gas' IN
-          LETRT v2 <== evalF t2 e gas' IN
+        LETRT v1 <== evalF t1 g gas' IN
+          LETRT v2 <== evalF t2 g gas' IN
             match v1 with 
               | vabs tx tf te => evalF tf (acons tx v2 te) gas'
               | _ => efr_stuck
@@ -166,10 +170,10 @@ with evalF' (t : tm) (e : rctx) (gas' : nat) {struct gas'} : ef_return :=
     | ttrue => efr_normal vtrue
     | tfalse => efr_normal vfalse
     | tif tb t1 t2 => 
-        LETRT vb <== evalF tb e gas' IN
+        LETRT vb <== evalF tb g gas' IN
           match vb with
-            | vtrue => evalF t1 e gas'
-            | vfalse => evalF t2 e gas'
+            | vtrue => evalF t1 g gas'
+            | vfalse => evalF t2 g gas'
             | _ => efr_stuck
           end
   end.

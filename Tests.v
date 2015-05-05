@@ -1,8 +1,7 @@
-(** * Tests: tests related to LDEF. Currently just Pierce's examples. *)
+(** * Tests of the small step semantics and typing rules defined in LDEF.  *)
 
-(** ** Tests: Pierce's examples: tests related to small step semantics. *)
+(** This file contains Pierce's examples taken from Stlc.v. *)
 
-Add LoadPath  "~/Polya/coq/pv".
 Add LoadPath  "~/Polya/coq/pierce_software_foundations_3.2".
 
 Require Export LDef.
@@ -143,8 +142,8 @@ Lemma step_example4' :
   tapp idBB (tapp notB ttrue) ==>* tfalse.
 Proof. normalize.  Qed.  
 
-(** **** Exercise: 2 stars (step_example3)  *)  
-(** Try to do this one both with and without [normalize]. *)
+(* Exercise: 2 stars (step_example3)  *)  
+(* Try to do this one both with and without [normalize]. *)
 
 Lemma step_example5 :
        (tapp (tapp idBBBB idBB) idB)
@@ -153,11 +152,11 @@ Proof. (* FILLED IN  *)
 (*
   eapply multi_step; eauto; try instantiate; simpl.
   eapply multi_step; eauto; try instantiate; simpl.
-  apply multi_refl. *)
+  apply multi_refl. 
+*)
   repeat (eapply multi_step; eauto; try instantiate; simpl; try apply multi_refl).
   (* In this file, coq infinitie-looped without the final try. *)
 Qed.
-(** [] *)
 
 (* ################################### *)
 (** *** Examples *)
@@ -193,8 +192,7 @@ Proof with auto using extend_eq.
   apply T_Var...
 Qed.
 
-(** **** Exercise: 2 stars, optional (typing_example_2_full)  *)
-(** Prove the same result without using [auto], [eauto], or
+(** (Exerice) The same result without using [auto], [eauto], or
     [eapply]. *)
 
 Example typing_example_2_full :
@@ -268,7 +266,6 @@ Proof with auto.
   eapply T_App. apply T_Var. reflexivity.
   apply T_Var. reflexivity.
 Qed.
-(** [] *)
 
 (** We can also show that terms are _not_ typable.  For example, let's
     formally check that there is no typing derivation assigning a type
@@ -297,8 +294,7 @@ Proof.
   (* rewrite extend_neq in H1. rewrite extend_eq in H1. *)
   inversion H1.  Qed.
 
-(** **** Exercise: 3 stars, optional (typing_nonexample_3)  *)
-(** Another nonexample:
+(** (Exercie) Another nonexample:
     ~ (exists S, exists T,
           empty |- \x:S. x x : T).
 *)
@@ -321,6 +317,4 @@ Proof.
     inversion H0. 
     inversion H0. apply IHT11_1. rewrite H2. apply H1.
 Qed.
-(** [] *)
-
 

@@ -1,7 +1,8 @@
-(** * LEProps: Properties of LEvalF (a big-step semantics for LDef) *)
+(** * Soundness of EvalF (a big-step semantics for LDef) *)
 
-(**  A proof of soundness of [evalF], using a recursive definition of [alue_has_type] rather
-      than an inductive relation (as was done in earlier attempts).  It seems to be working!  *)
+(**  This file develops a proof of soundness of [evalF], using a recursive definition of 
+      [value_has_type] rather than an inductive relation (as was done in earlier attempts).  
+      It seems to be working!  *)
 
 Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
@@ -63,7 +64,8 @@ Definition result_ok (er : ef_return) (T : ty) : Prop :=
 
 Definition evaluates_to_a (t : tm) (g : rctx) (T : ty) : Prop := 
     forall n, result_ok (evalF t g n) T.
-Notation "t '/' g '=>:' T" := (evaluates_to_a t g T) (at level 40, g at level 39).
+Notation "t '/' g '=>:' T" := (evaluates_to_a t g T) 
+    (at level 40, g at level 39).
 
 Inductive rtcontext_has_type: rctx -> context -> Prop :=
   | TC_nil : anil :::* empty
@@ -87,26 +89,20 @@ Qed.
 
 Lemma fun_vals:
   forall T1 T2 v, v ::: TArrow T1 T2 ->
-    exists xf tb gf, v = (vabs xf tb gf) /\ (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2).
+    exists xf tb gf, 
+      v = (vabs xf tb gf) 
+      /\ (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2).
 Proof. 
   intros T1 T2 v Hvt.  destruct v; simpl in Hvt.
-    exists i t a. split. reflexivity.
-    intros va Hvat n. specialize (Hvt va Hvat n). destruct (evalF t (acons i va a) n); unfold result_ok; auto.
+    exists i t a. split. 
+      reflexivity.
+      intros va Hvat n. 
+        specialize (Hvt va Hvat n). 
+        destruct (evalF t (acons i va a) n); unfold result_ok; auto.
     contradiction.
     contradiction.
 Qed.
 
-
-(*
-Lemma fake_TV_Abs:  
-      forall (xf : id) (tb : tm) (gf : alist evalue) (T1 T2 : ty), 
-          (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2) ->
-          vabs xf tb gf ::: TArrow T1 T2.
-Proof. 
-  introv Hva. red. intros va Hvat n. fold value_has_type in Hvat. fold  value_has_type. 
-  specialize (Hva va Hvat n). apply Hva.
-Qed.
- *) 
 
 (** *** Lemmas for reasoning about contexts (runtime and typing). *)
 (* lemmas, COPIED from LEProps1 because not in module *)
@@ -186,60 +182,63 @@ Proof.
 Qed.
 
 (* ###################################################################### *)
-(**  ** evalF_soundness *)
+(**  ** Proof of soundness of evalF *)
+(**  *** Proof of [evalF_is_sound_yielding_T] *)
 
 Theorem evalF_is_sound_yielding_T : 
   forall (t : tm) (G : context) (T : ty) (g : rctx),
     G |- t \in T ->  g :::* G -> t / g  =>: T.
 Proof.
   (* introv Hty HGg. generalize dependent G. generalize dependent g. generalize dependent T. *)
-  t_cases (induction t as [ x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) Case; introv Hty HGg.
+  t_cases (induction t as [ x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) 
+      Case; introv Hty HGg.
 
   Case "tvar". apply (ctx_tvar_then_evalsto G x T g Hty HGg).
 
   Case "tapp".
-    inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev.
+    inverts Hty. apply evalF_parts. intros n' er Hev. simpl in Hev.
     (* use the IHs to get [Ht1 : t1 / g =>: TArrow T11 T] and [Ht2 : t2 / g =>: T11].  *)
     assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
     assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
     (* use the [let_val] lemmas with Ht1 and Ht2 to decompose the two LETRT forms *)
-    apply (let_val t1 g n' _ _ (TArrow T11 T) T Hev Ht1). clear Hev Ht1. 
+    apply (let_val t1 g n' _ _ (TArrow T11 T) T Hev Ht1); clear Hev Ht1;
     intros v1 er1 Hv1 Hv1t erL2 HevL2.
-    apply (let_val t2 g n' _ _ _ _ HevL2 Ht2). clear HevL2 Ht2.
+    apply (let_val t2 g n' _ _ _ _ HevL2 Ht2); clear HevL2 Ht2;
     intros v2 er2 Hv2 Hv2t erf Hevf.
-    assert (Hex := fun_vals _ _ _ Hv1t). clear Hv1t.
+    assert (Hex := fun_vals _ _ _ Hv1t); clear Hv1t.
     inversion Hex as [xf [ tb [ gf [ Hv1eq Hva]]]]; subst v1; clear Hex.
     specialize (Hva v2 Hv2t). clear Hv2t.
     assert (Hok2 := Hva n'). rewrite Hevf in Hok2. apply Hok2.
 
   Case "tabs". 
-    inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. clear Hev. unfold result_ok.
-    red. intros va Hvat n. apply (IHtb _ _ (acons x va g) H4 (TC_cons _ _ _ va _ HGg Hvat)).
+    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
+    rewrite <- Hev. clear Hev. intros va Hvat n. 
+    apply (IHtb _ _ (acons x va g) H4 (TC_cons _ _ _ va _ HGg Hvat)).
 
   Case "ttrue".
-    inverts Hty. apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. auto. 
+    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
+    rewrite <- Hev. auto.
 
   Case "tfalse".
-    inverts Hty. apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. auto. 
+    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
+    rewrite <- Hev. auto.
 
   Case "tif".
-    inverts Hty.
+    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
     assert (Hti := IHt1 _ _ _ H3 HGg); clear IHt1 H3.
     assert (Htt := IHt2 _ _ _ H5 HGg); clear IHt2 H5.
     assert (Hte := IHt3 _ _ _ H6 HGg); clear IHt3 H6.
 
-    apply evalF_parts. intros n' er Hev. simpl in Hev.
     specialize (Hti n'). destruct (evalF ti g n').
        SCase "efr_normal vb". destruct e; simpl in Hti; subst er.
           SSCase "e = (vabs ...)". contradiction.
-          SSCase "e = vtrue".  specialize (Htt n'). assumption.
-          SSCase "e = vfalsw".  specialize (Hte n'). assumption.
+          SSCase "e = vtrue".  apply (Htt n').
+          SSCase "e = vfalse".  apply (Hte n').
       SCase "nogas". subst er. apply Hti.
       SCase "stuck". unfold result_ok in Hti. contradiction.
 Qed.
 
+(**  *** Proof of [evalF_is_sound] *)
 
 Corollary evalF_is_sound: 
   forall (t : tm) (G : context) (T : ty) (g : rctx) (n : nat),
@@ -250,11 +249,5 @@ Proof.
   destruct (evalF t g n); [ discriminate | discriminate |
      unfold result_ok in Hr; contradiction] .
 Qed.
-
-
-
-
-
-
 
 End LEProps.

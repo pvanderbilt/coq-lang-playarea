@@ -1,4 +1,8 @@
-(** ** Tests2: tests of eval (the big-step relationation. *)
+(** * Tests of the big-step semantics defined in LEval.v.
+
+    This file contains tests of the big-step relation [eval] and function [evalF] as
+    defined in [LEval.v].
+ *)
 
 Add LoadPath  "~/Polya/coq/pierce_software_foundations_3.2".
 Require Export SfLib.
@@ -20,16 +24,15 @@ Definition id_b := Id(10).
 Notation f_ident T := (tabs id_x T (tvar id_x)).
 
 Definition f_not := (tabs id_b TBool (tif (tvar id_b) tfalse ttrue)).
-Definition f_pair := 
-  (tabs id_x TBool (tabs id_y TBool (tabs id_b TBool (tif (tvar id_b) (tvar id_x) (tvar id_y)) ))).
+Definition f_pair := (tabs id_x TBool (tabs id_y TBool 
+    (tabs id_b TBool (tif (tvar id_b) (tvar id_x) (tvar id_y))) )).
 Definition t_pair1 :=  (tapp (tapp f_pair ttrue) tfalse).
-
 
 Hint Extern 1 (alookup _ _ = _) => simpl.
 Hint Extern 1 (eval (tapp ?F _) _ _) => unfold F. 
 Hint Extern 1 (eval (?F) _ _) => unfold F.
 
-(** *** term constructors: let1 and lets *)
+(** *** Term constructors: [let1] and [lets] *)
 
 Definition let1 (b: id * ty * tm)  (ti : tm) := match b with (x, Tx, tx)  => tapp (tabs x Tx ti) tx end.
 
@@ -40,7 +43,7 @@ Fixpoint lets (bs: list (id * ty * tm))  (ti : tm) :=
   end.
 
 (* ###################################################################### *)
-(** *** Eval tests *)
+(** ** Tests of [eval] *)
 
 (*
 Ltac test_eauto := info_eauto.
@@ -87,7 +90,7 @@ Example e_pair1t : eval (tapp t_pair1 ttrue) rctx0 vtrue.
 Proof. test_eauto20. Qed.
 
 (* ###################################################################### *)
-(** *** evalF tests *)
+(** ** Tests of [evalF] *)
 
 Example ef_true : evalF ttrue rctx0 10 = efr_normal vtrue.
 Proof. reflexivity. Qed.
@@ -116,7 +119,7 @@ Proof. reflexivity. Qed.
 Example ef_pair_f : evalF (tapp (tabs id_x TBool (tapp (tvar id_x) ttrue)) t_pair1) rctx0 10 = efr_normal vtrue.
 Proof. reflexivity. Qed.
 
-(** ***  tests of let1 and lets *)
+(** ***  Tests of [let1] and [lets] *)
 
 Definition elet1 := let1 (id_x, TBool, ttrue) (tvar id_x).
 Definition elet1' := lets [(id_x, TBool, ttrue)] (tvar id_x).
@@ -127,35 +130,41 @@ Proof. reflexivity. Qed.
 Example e_let1' : evalF (elet1') rctx0 10 = efr_normal vtrue.
 Proof. reflexivity. Qed.
 
-(** ** more tests *)
+(** *** Definitions of [evalF_yields_v]  and [evalF_ok] *)
+Definition evalF_yields_v (t : tm) (v: evalue) : Prop :=
+  evalF t rctx0 10 = efr_normal v.
+
+Definition evalF_ok (t : tm)  : Prop :=
+  exists (v: evalue), evalF_yields_v t v.
+
+(** *** More tests *)
 
 Definition f_and := (tabs id_x TBool (tabs id_y TBool (tif (tvar id_x) (tvar id_y) tfalse))).
 Definition f_or := (tabs id_x TBool (tabs id_y TBool (tif (tvar id_x) ttrue (tvar id_y)))).
 
-Example e_andf : evalF f_and rctx0 10 = 
-          efr_normal (vabs id_x (tabs id_y TBool (tif (tvar id_x) (tvar id_y) tfalse)) rctx0).
+Example e_andf : evalF_yields_v 
+    f_and
+    (vabs id_x (tabs id_y TBool (tif (tvar id_x) (tvar id_y) tfalse)) rctx0).
 Proof. (* eexists. unfold f_and. simpl. *) reflexivity. Qed.
 
-Example e_andf_bind : exists v, evalF (tapp f_and ttrue) rctx0 10 = efr_normal v.
-Proof. eexists. unfold f_and. simpl. reflexivity. Qed.
+Example e_andf_bind : evalF_ok (tapp f_and ttrue).
+Proof. eexists. unfold f_and. reflexivity. Qed.
 
-Example e_let_andf_bind : exists v, evalF (let1 (id_x, TBool, ttrue) (tapp f_and ttrue)) rctx0 10 = efr_normal v.
+Example e_let_andf_bind : evalF_ok (let1 (id_x, TBool, ttrue) (tapp f_and ttrue)).
 Proof. eexists. unfold let1, f_and. simpl. reflexivity. Qed.
-
-Definition check_evalF (t : tm) (v: evalue) : Prop :=
-  evalF t rctx0 10 = efr_normal v.
 
 (* let x = true in let x = not x in x should equal false, not true *)
 Example e_bind_test1 : 
-  check_evalF 
-    (lets ((id_x, TBool, ttrue) :: (id_x, TBool, (tapp f_not (tvar id_x))):: nil) (tvar id_x))
+  evalF_yields_v 
+    (lets [(id_x, TBool, ttrue); (id_x, TBool, (tapp f_not (tvar id_x)))] 
+      (tvar id_x))
     vfalse.
 Proof. reflexivity. Qed.
 
 (* let y = true in let x = y in let y = false in x /\ ~y should equal true *)
 Example e_bind_test2 : 
-  check_evalF 
-    (lets ((id_y, TBool, ttrue) :: (id_x, TBool, (tvar id_y)) :: (id_y, TBool, tfalse) :: nil) 
+  evalF_yields_v 
+    (lets [(id_y, TBool, ttrue); (id_x, TBool, (tvar id_y)); (id_y, TBool, tfalse)] 
       (tapp (tapp f_and (tvar id_x)) (tapp f_not (tvar id_y))))
     vtrue.
 Proof. reflexivity. Qed.

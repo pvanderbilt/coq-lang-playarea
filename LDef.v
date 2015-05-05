@@ -58,22 +58,6 @@ Hint Constructors value.
 (* ###################################################################### *)
 (** *** Substitution *)
 
-
-(** Here is the definition, informally...
-   [x:=s]x = s
-   [x:=s]y = y                                   if x <> y
-   [x:=s](\x:T11.t12)   = \x:T11. t12      
-   [x:=s](\y:T11.t12)   = \y:T11. [x:=s]t12      if x <> y
-   [x:=s](t1 t2)        = ([x:=s]t1) ([x:=s]t2)       
-   [x:=s]true           = true
-   [x:=s]false          = false
-   [x:=s](if t1 then t2 else t3) = 
-                   if [x:=s]t1 then [x:=s]t2 else [x:=s]t3
-]]  
-*)
-
-(**    ... and formally: *)
-
 Reserved Notation "'[' x ':=' s ']' t" (at level 20).
 
 Fixpoint subst (x:id) (s:tm) (t:tm) : tm :=
@@ -106,32 +90,6 @@ where "'[' x ':=' s ']' t" := (subst x s t).
 
 (* ################################### *)
 (** *** Reduction *)
-
-(** 
-                               value v2
-                     ----------------------------                   (ST_AppAbs)
-                     (\x:T.t12) v2 ==> [x:=v2]t12
-
-                              t1 ==> t1'
-                           ----------------                           (ST_App1)
-                           t1 t2 ==> t1' t2
-
-                              value v1
-                              t2 ==> t2'
-                           ----------------                           (ST_App2)
-                           v1 t2 ==> v1 t2'
-*)
-(** ... plus the usual rules for booleans:
-                    --------------------------------                (ST_IfTrue)
-                    (if true then t1 else t2) ==> t1
-
-                    ---------------------------------              (ST_IfFalse)
-                    (if false then t1 else t2) ==> t2
-
-                              t1 ==> t1'
-         ----------------------------------------------------           (ST_If)
-         (if t1 then t2 else t3) ==> (if t1' then t2 else t3)
-*)
 
 Reserved Notation "t1 '==>' t2" (at level 40).
 
@@ -180,43 +138,14 @@ Tactic Notation "normalize" :=
 (** *** Contexts *)
 
 (** Partial_map is defined in [SfLib]. *)
+
 Definition context := partial_map ty.
 
 (* ################################### *)
 (** *** Typing Relation *)
 
-(** 
-                             Gamma x = T
-                            --------------                              (T_Var)
-                            Gamma |- x \in T
-
-                      Gamma , x:T11 |- t12 \in T12
-                     ----------------------------                       (T_Abs)
-                     Gamma |- \x:T11.t12 \in T11->T12
-
-                        Gamma |- t1 \in T11->T12
-                          Gamma |- t2 \in T11
-                        ----------------------                          (T_App)
-                         Gamma |- t1 t2 \in T12
-
-                         --------------------                          (T_True)
-                         Gamma |- true \in Bool
-
-                        ---------------------                         (T_False)
-                        Gamma |- false \in Bool
-
-       Gamma |- t1 \in Bool    Gamma |- t2 \in T    Gamma |- t3 \in T
-       --------------------------------------------------------          (T_If)
-                  Gamma |- if t1 then t2 else t3 \in T
-
-
-    We can read the three-place relation [Gamma |- t \in T] as: 
-    "to the term [t] we can assign the type [T] using as types for
-    the free variables of [t] the ones specified in the context 
-    [Gamma]." *)
-
 Reserved Notation "Gamma '|-' t '\in' T" (at level 40).
-    
+
 Inductive has_type : context -> tm -> ty -> Prop :=
   | T_Var : forall Gamma x T,
       Gamma x = Some T ->
