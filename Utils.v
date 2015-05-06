@@ -1,11 +1,10 @@
 (** This library contains some utlities, 
      primarily theorems and tactics, to help with theorem proving  *)
 
-Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
-Require Export SfLib.
-Require Import LibTactics.
-
 Module PVUTILS.
+
+(* For the examples: *)
+Require Import Arith.
 
 (*******************************************************************)
 (** * Tactics for dealing with hypotheses that are implications. *)
@@ -194,5 +193,6 @@ Example MP2_ex1a' : ~ ( 1 = 1*1 -> 1 > 1 ).
 Proof. intro HC. sh.split_hyp' HC. auto. apply (gt_irrefl 1 HC). Qed.
 
 *)
+
 End PVUTILS.
 
