@@ -1,15 +1,17 @@
-(** * LEProps1: Properties of LEval (a big-step semantics for LDef) *)
+(** * Soundness of eval, a big-step semantics for LDef*)
 
-(**  V1: An attempt at soundness of eval using a [value_has_type]
-      relation with several variations (commented out).  However, this version uses the
-      eval relation and doesn't take non-termination into account.  The theorem goes through only
-      because of a [fun_vals] lemma that is admitted (faked). *)
+(**  V1: An attempt at soundness of [eval] as defined in LEval.v using a [value_has_type]
+      relation with several variations (commented out).  The theorem goes through only
+      because of a [fun_vals] lemma that is admitted (faked). 
+
+      Because this version reasons about the [eval] relation, it doesn't take 
+      non-termination into account and, so, has been abandonded.  *)
 
 Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export LDef LEval LEProps.
+Require Export LDef LEval LEProps0.
 Import LDEF.
 Import LEVAL.
 
@@ -110,64 +112,8 @@ Proof.
 Qed.
 
 
-(** * tests *)
-Example e_not_T: f_not / rctx0 |: (TArrow TBool TBool).
-Proof. eauto 15 using TVE.
-  apply TVE. eauto 15.
-(*eexists. split.
-      eapply E_Abs.
-      eapply TV_Abs. intros va. eexists. split.
-        skip. 
-        eapply E_If. 
-          eapply E_Var. eauto. 
-          skip.
-Abort All.
- *)
-Qed.
-
-Hint Resolve TVE.
-Example e_f_pair_T: f_pair / rctx0 |: TArrow TBool (TArrow TBool (TArrow TBool TBool)).
-Proof. apply TVE. info_eauto 15.
-    (* apply TV_Abs. eexists. split; eauto. eauto 8 using has_type. *)
-Qed.
-
 (* ###################################################################### *)
-(**  ** ctxts_gx_then_alookup *)
 
-
-(* 
-Lemma ctxts_gx_then_alookup : 
-  forall (x : id) (G : context) (g : rctx) (T : ty),
-    g :* G -> 
-    G x = Some T ->
-      exists v, alookup x g = Some v /\ v : T.
-Proof.
-  introv Hctxts HGxT. rtcontext_has_type_cases (induction Hctxts) Case.
-    Case "TC_nil". inversion HGxT.
-    Case "TC_cons". unfold extend in HGxT. destruct (eq_id_dec x0 x).
-      SCase "x=x0". inversion HGxT; subst; clear HGxT. exists v. split.
-        simpl. apply eq_id.
-        assumption.
-      SCase "x0<>x". apply IHHctxts in HGxT. clear IHHctxts.
-        inversion HGxT as [v' [Ha' Hb']]. exists v'. split.
-          rewrite <- Ha'. simpl. apply (neq_id _ _ _ _ _ n).
-          assumption.
-Qed.
-
-Lemma lemma1 : forall G x T,
-  G |- (tvar x) \in T -> G x = Some T.
-Proof. introv H. inversion H. auto. Qed.
-
-Lemma lemma2 : forall G x T g,
-  G |- (tvar x) \in T -> g :* G -> 
-    exists v, alookup x g = Some v /\ v : T.
-Proof. introv HG Hg. apply (ctxts_gx_then_alookup x G g T Hg). apply lemma1. assumption. Qed.
-
-Lemma lemma3 : forall G x T g,
-  G |- (tvar x) \in T -> g :* G -> 
-    exists v, eval (tvar x) g v /\ v : T.
-Proof. introv HG Hg. destruct (lemma2 G x T g HG Hg) as [v [Hl Hv]]. exists v. auto. Qed.
- *)
 Hint Constructors value_has_type' rtcontext_has_type' evaluates_to'.
 Hint Resolve TVE. 
 Theorem bigstep_soundness :
@@ -313,33 +259,5 @@ Proof.
       apply bigstep_soundness with (G:=(extend Gf xf T1)). auto. auto.
 Qed.
 *)
-(*
-destruct (ctxts_gx_then_alookup _ _ _ _ Hg H).
-apply ctxts_gx_then_alookup. eexists. split. constructor. eauto.
-
-has_type_cases (induction Hty) SCase; intros  g Hg.
-    SCase "T_Var". (* x *) destruct (ctxts_gx_then_alookup _ _ _ _ Hg H) as [v [He Hv]].
-      exists (v). auto.
-    SCase "T_Abs". (* x T11 T12 *) destruct (IHHty 
-
-eexists. split.
-      eapply E_Abs.
-      apply TV_Abs. exists Gamma. auto.
-    SCase "T_App". 
-      destruct (IHHty1 g Hg) as [v1 [He1 Ht1]]; clear IHHty1.
-      destruct (IHHty2 g Hg) as [v2 [He2 Ht2]]; clear IHHty2. 
-      inversion Ht1; subst; clear Ht1. eexists. split. 
-        eapply E_App.
-          eapply He1.
-          eapply He2.
-          destruct H1 as [G [HGg HGT]]. clear He1 He2.
-
-
-Abort All.
-  Case "fun_vals'". 
-  intros v T1 T2 Hv.  inverts Hv. exists xf tb gf. split; auto.
-    intros va Hva.
-*)
-
 
 End LEProps1.

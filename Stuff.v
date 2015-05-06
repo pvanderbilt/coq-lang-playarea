@@ -50,7 +50,7 @@ end
 
 *)
 
- Print tree.
+Print tree.
 Print eq'_ind.
 Print list.
 

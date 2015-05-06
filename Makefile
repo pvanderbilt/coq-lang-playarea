@@ -1,4 +1,5 @@
-MODULES := LDef LProps LEval Tests Tests2 LEProps LEProps3 Utils
+MODULES := LDef LProps LEval Tests Tests2 LEProps LEProps3 Utils \
+						LEProps0 LInduction
 VS      := $(MODULES:%=%.v)
 PSF			:= ../../Coq/pierce_software_foundations_3.2
 
