@@ -1,6 +1,6 @@
 (** This library contains utilities, primarily theorems and tactics, 
-		to help with theorem proving.  It was motivated by some of the proofs is SF's
-		Hoare.v.*)
+    to help with theorem proving.  It was motivated by some of the proofs is SF's
+    Hoare.v.*)
 
 Module PVUTILS.
 
