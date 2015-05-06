@@ -1,5 +1,6 @@
-(** This library contains some utlities, 
-     primarily theorems and tactics, to help with theorem proving  *)
+(** This library contains utilities, primarily theorems and tactics, 
+		to help with theorem proving.  It was motivated by some of the proofs is SF's
+		Hoare.v.*)
 
 Module PVUTILS.
 
@@ -9,13 +10,13 @@ Require Import Arith.
 (*******************************************************************)
 (** * Tactics for dealing with hypotheses that are implications. *)
 (** ** Tactic [adapt_implication]
-        Given an hypothesis of the form [H: P->Q] 
+        Given an hypothesis of the form [H:P->Q] 
         where [Q] does not match the goal;
         [adapt_implication H] generates [P] as a subgoal and, when proven, 
-        returns to proving the goal with hypothesis [H : Q].
+        returns to proving the goal with hypothesis [H:Q].
 *)
 
-(**  The theorem that drives the tactic: *)
+(**  The following theorem drives the tactic: *)
 
 Theorem MP2 : forall P Q R : Prop, (P->Q) -> P -> (Q->R) -> R.
 Proof. 
@@ -70,7 +71,7 @@ Qed.
       and then acts like [adapt_universal H].
 *)
 
-(**  The theorem that drives the tactics: *)
+(**  The following theorem drives the tactics: *)
 
 Theorem MPQ :
   forall (T : Type) (P Q : T -> Prop) (R : Prop),
@@ -145,7 +146,7 @@ Proof.
   apply (HxzR Hxz).
 Qed.
 
-(**  The theorem that drives the tactics: *)
+(**  The tactic definition: *)
 
 Ltac simplify_term_in t H :=
   let Ht := fresh "H_sti_eq" in
