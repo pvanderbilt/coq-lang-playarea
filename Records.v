@@ -1,15 +1,20 @@
 (** * Records: Adding Records to STLC *)
 
-Add LoadPath "/Users/pv/Polya/Coq/pierce_software_foundations_3.2".
+(** This file started out as SF's Records.v but has been modified to have records as 
+      association lists. *)
 
-Require Export Stlc.
+Add LoadPath "/Users/pv/Polya/Coq/pierce_software_foundations_3.2".
+Require Export SfLib.
+Require Import LibTactics.
+
+(* Require Export Stlc. *)
+Require Export LDef.
+Import LDEF.
+
+Module Records.
 
 (* ###################################################################### *)
-(** * Pete's version of ""Adding Records *)
-
-
-(**
-    Syntax:
+(**  ** Syntax:
 <<
        t ::=                          Terms:
            | ...
@@ -24,36 +29,9 @@ Require Export Stlc.
            | ...
            | {i1:T1, ..., in:Tn}         record type
 >> 
-   Reduction:
-                                 ti ==> ti'                            (ST_Rcd)
-    --------------------------------------------------------------------  
-    {i1=v1, ..., im=vm, in=tn, ...} ==> {i1=v1, ..., im=vm, in=tn', ...}
-
-                                 t1 ==> t1'
-                               --------------                        (ST_Proj1)
-                               t1.i ==> t1'.i
-
-                          -------------------------                (ST_ProjRcd)
-                          {..., i=vi, ...}.i ==> vi
-   Typing:
-               Gamma |- t1 : T1     ...     Gamma |- tn : Tn
-             --------------------------------------------------         (T_Rcd)
-             Gamma |- {i1=t1, ..., in=tn} : {i1:T1, ..., in:Tn}
-
-                       Gamma |- t : {..., i:Ti, ...}
-                       -----------------------------                   (T_Proj)
-                             Gamma |- t.i : Ti
 *)
 
-(* ###################################################################### *)
-(** * Formalizing Records *)
-
-Module STLCExtendedRecords.
-
-(* ###################################################################### *)
-(** *** Syntax and Operational Semantics *)
-
-(**  ALISTS *)
+(** *** Preliminary definitions (alists): *)
 
 Inductive alist (T : Type) : Type :=
   | nil    : alist T
@@ -62,11 +40,19 @@ Inductive alist (T : Type) : Type :=
 Arguments nil {T}.
 Arguments cons {T} _ _ _.
 
+Fixpoint lookup {X: Type} (x: id) (a: alist X) : option X :=
+  match a with
+    | nil => None
+    | cons y t a' => if eq_id_dec x y then (Some t) else (lookup x a')
+    end.
+
+(*
 Fixpoint lookup {X: Type} (x: id) : (alist X) -> option X :=
   fix fLookup a  := match a with
     | nil => None
     | cons y t r => if eq_id_dec x y then (Some t) else (fLookup r)
     end.
+ *)
 
 Fixpoint map {X Y: Type} (f: X -> Y) (a: alist X) : alist Y :=
   match a with
@@ -79,8 +65,8 @@ Tactic Notation "A_cases" tactic(first) ident(c) :=
   [ Case_aux c "nil" | Case_aux c "cons" ].
 
 
-
-(**  types *)
+(**  *** Redefinition of types, [ty].
+      The last clause was added: *)
 
 Inductive ty : Type :=
   | TBase     : id -> ty
@@ -92,55 +78,18 @@ Tactic Notation "T_cases" tactic(first) ident(c) :=
   [ Case_aux c "TBase" | Case_aux c "TArrow"
   | Case_aux c "TRcd" ].
 
-(** Pierce: Unfortunately, we encounter here a limitation in Coq: this type
-    does not automatically give us the induction principle we expect
-    -- the induction hypothesis in the [TRcd] case doesn't give us
-    any information about the [ty] elements of the list, making it
-    useless for the proofs we want to do.  *)
+(** In SF there is a note here about how this doesn't give the induction principle we want.
+    Here we do it this way and fix the induction principle. *)
 
-(* Check ty_ind. 
-   ====>
-    ty_ind : 
-      forall P : ty -> Prop,
-        (forall i : id, P (TBase i)) ->
-        (forall t : ty, P t -> forall t0 : ty, P t0 -> P (TArrow t t0)) ->
-        (forall a : alist ty, P (TRcd a)) ->    (* ??? *)
-        forall t : ty, P t
-*)
-
-(** It is possible to get a better induction principle out of Coq, but
-    the details of how this is done are not very pretty, and it is not
-    as intuitive to use as the ones Coq generates automatically for
-    simple [Inductive] definitions.
-
-    Fortunately, there is a different way of formalizing records that
-    is, in some ways, even simpler and more natural: instead of using
-    the existing [list] type, we can essentially include its
-    constructors ("nil" and "cons") in the syntax of types. *)
-
-(* Inductive ty : Type :=
-  | TBase : id -> ty
-  | TArrow : ty -> ty -> ty
-  | TRNil : ty
-  | TRCons : id -> ty -> ty -> ty.
- *)
-
-
-(** Similarly, at the level of terms, we have constructors [trnil]
-    -- the empty record -- and [trcons], which adds a single field to
-    the front of a list of fields. *)
+(**  *** Redefinition of terms, [tm].
+        The last two clauses were added: *)
 
 Inductive tm : Type :=
   | tvar : id -> tm
   | tapp : tm -> tm -> tm
   | tabs : id -> ty -> tm -> tm
-  (* records *)
   | tproj : tm -> id -> tm
   | trcd: alist tm -> tm.
-
-(*   | trnil :  tm
-  | trcons : id -> tm -> tm -> tm.
- *)
 
 Tactic Notation "t_cases" tactic(first) ident(c) :=
   first;
@@ -161,19 +110,104 @@ Notation i2 := (Id 8).
 
 (** [{ i1:A }] *)
 
-(* Check (TRcd (cons ty i1 A (nil ty))). *)
+Example er1 : exists (t:ty), t = TRcd (cons i1 A (nil)).
+Proof. eauto. Qed.
 
 (** [{ i1:A->B, i2:A }] *)
+Example er2 : exists (t:ty), t = 
+  TRcd (cons i1 (TArrow A B) 
+           (cons i2 A (nil))).
+Proof. eauto. Qed.
 
-(* 
-Check (TRcd (cons ty i1 (TArrow A B) 
-           (cons ty i2 A (nil ty)))). 
- *)
+
 (* ###################################################################### *)
+(** ** Custom recursion principles. *)
+
+(** *** Recursion on types, [ty_nested_rect]
+
+    The coq-generated recursion function has the following type:
+<< 
+  ty_rect : 
+    forall P : ty -> Type,
+      (forall i : id, P (TBase i)) ->
+      (forall t : ty, P t -> forall t0 : ty, P t0 -> P (TArrow t t0)) ->
+      (forall r : alist ty, P (TRcd r)) ->
+    forall t : ty, P t
+>>
+
+    The following custom recursion function replaces the last case 
+    (a proof of [P (TRcd r)] given only that [r : aliast ty])
+    with four:
+      - an additional proposition function [Q] over [alist ty] (at the top),
+      - a proof that for record, [r], [Q r] implies [P (TRcd r)],
+      - a proof of [Q nil] and
+      - a proof that [P t] and [Q r] implies [Q (cons i t r))]
+
+    The definition may be a little hard to follow, as it is using the coq-generated [ty_rect] 
+    and [alist_rect].
+*)
+
+Definition ty_nested_rect
+  (P: ty -> Type) 
+  (Q: alist ty -> Type)
+    (fTBase : forall i : id, P (TBase i))
+    (fTArrow : forall t : ty, P t -> forall t0 : ty, P t0 -> P (TArrow t t0))
+    (fTRcd' : forall r : alist ty, Q r -> P (TRcd r))
+      (fTRcd_nil' : Q nil)
+      (fTRcd_cons' : forall (i : id) (t : ty) (r : alist ty), P t -> Q r -> Q (cons i t r))
+  : forall t : ty, P t
+  := fix F (t : ty) : P t :=
+    let fTRcd_cons  i y r :=  fTRcd_cons' i y r (F y) 
+    in let fTRcd r :=  fTRcd' r (alist_rect ty Q fTRcd_nil' fTRcd_cons r)
+    in ty_rect P fTBase fTArrow fTRcd t.
+
+(* WAS
+Definition ty_nested_rect  (P: ty -> Type) (Q: alist ty -> Type)
+  (fTBase : forall i : id, P (TBase i))
+  (fTArrow : forall t : ty,
+        P t -> forall t0 : ty, P t0 -> P (TArrow t t0))
+  (fTRcd : forall r : alist ty, Q r -> P (TRcd r))
+  (fTRcd_nil : Q nil)
+  (fTRcd_cons : forall (i : id) (t : ty) (a : alist ty), P t -> Q a -> Q (cons i t a))
+ := fix F (t : ty) : P t := 
+  match t as t0 return (P t0) with
+    | TBase i => fTBase i
+    | TArrow t0 t1 => fTArrow t0 (F t0) t1 (F t1)
+    | TRcd r => let frcd_cons' := (fun i y r' => fTRcd_cons i y r' (F y) )
+      in fTRcd r (alist_rect ty Q fTRcd_nil frcd_cons' r)
+  end.
+ *)
+
+(** *** Recursion on terms, [tm_nested_rect]
+
+    This is similar to above, except that it is dealing with terms rather than types.
+*)
+
+Definition tm_nest_rect
+  (P: tm -> Type) 
+  (Q: alist tm -> Type)
+    (fvar : forall i : id, P (tvar i))
+    (fapp : forall t : tm, P t -> forall t0 : tm, P t0 -> P (tapp t t0))
+    (fabs : forall (i : id) (t : ty) (t0 : tm), P t0 -> P (tabs i t t0))
+    (fproj : forall t : tm, P t -> forall i : id, P (tproj t i))
+    (frcd' : forall a : alist tm, Q a -> P (trcd a))
+      (frcd_nil' : Q nil)
+      (frcd_cons' : forall (i : id) (t : tm) (a : alist tm), P t -> Q a -> Q (cons i t a))
+  : forall t : tm, P t
+  := fix F (t : tm) : P t := 
+    let frcd_cons  i y r := frcd_cons' i y r (F y)
+    in let frcd  r := frcd' r (alist_rect tm Q frcd_nil' frcd_cons r)
+    in tm_rect P fvar fapp fabs fproj frcd t.
+
 
 
 (* ###################################################################### *)
 (** *** Substitution *)
+
+(**  Coq complains when subst is defined with [Fixpoint ... with] 
+     as it cannot figure out that the term is not increasing in the 
+     [with] clause.  [subst] can be defined with a nested fixpoint, as follows: 
+*)
 
 Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
   let rsubst := (fix rsubst  (a: alist tm) : alist tm := 
@@ -190,21 +224,51 @@ Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
     | trcd r => trcd (rsubst r)
   end.
 
+Notation "'[' x ':=' s ']' t" := (subst x s t) (at level 20).
 
-Definition tm_rect_nest (P: tm -> Type) (Q: alist tm -> Type)
-  (fvar : forall i : id, P (tvar i))
-  (fapp : forall t : tm,
-        P t -> forall t0 : tm, P t0 -> P (tapp t t0))
-  (fabs : forall (i : id) (t : ty) (t0 : tm),
-        P t0 -> P (tabs i t t0))
-  (fproj : forall t : tm, P t -> forall i : id, P (tproj t i))
-  (frcd' : forall a : alist tm, Q a -> P (trcd a))
-  (frcd_nil' : Q nil)
-  (frcd_cons' : forall (i : id) (t : tm) (a : alist tm), P t -> Q a -> Q (cons i t a))
- := fix F (t : tm) : P t := 
-    let frcd_cons  i y r := frcd_cons' i y r (F y)
-    in let frcd  r := frcd' r (alist_rect tm Q frcd_nil' frcd_cons r)
-    in tm_rect P fvar fapp fabs fproj frcd t.
+(**  In order to make the nested fixpoint visible, it is defined again as
+     [subst_rcd] and a lemma is given that supports rewriting the nested
+     fixpoint to it. *)
+
+Fixpoint subst_rcd (x:id) (s:tm) (a: alist tm) : alist tm := 
+  match a with
+    | nil => nil 
+    | cons i t r' => cons  i (subst x s t) (subst_rcd x s r')
+  end.
+
+Notation "'[' x ':=' s ']*' r" := (subst_rcd x s r) (at level 20).
+
+
+Lemma subst_rcd_eqv :
+  forall x s a,
+    [x := s]* a =
+    ((fix rsubst (a0 : alist tm) : alist tm :=
+         match a0 with
+         | nil => nil
+         | cons i t r' => cons i ([x := s]t) (rsubst r')
+         end) a).
+Proof.
+  intros. induction a.
+    reflexivity.
+    simpl. rewrite <- IHa. reflexivity.
+Qed.
+
+
+(**   Here is substitutio defined using the custom recursion defined above.
+      I don't know how to use the match syntax with a custom recursion principle. 
+      However, it simplifies into a mess and I can't fold back up, so we're
+      back to using the one above.*)
+
+Definition subst_ugly (x:id) (s:tm) :tm -> tm := 
+  tm_nest_rect (fun _ => tm) (fun _ => alist tm)
+    (fun y => if eq_id_dec x y then s else (tvar y))                  (* tvar y *)
+    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                               (* tapp t1 t2 *)
+    (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1)) (* tabs y T t1 *)
+    (fun t1 mt1 i => tproj mt1 i)                                     (* tproj t1 i *)
+    (fun r mr => trcd mr)                                             (* trcd r *)
+      (nil)                                                           (* r=nil *)
+      (fun i t r mt mr => cons i mt mr).                              (* r=cons i t r *)
+
 
 (*
 Definition tm_rect_nest (P: tm -> Type) (Q: alist tm -> Type)
@@ -227,23 +291,7 @@ Definition tm_rect_nest (P: tm -> Type) (Q: alist tm -> Type)
       in frcd r (alist_rect tm Q frcd_nil frcd_cons' r)
   end.
  *)
-(*
 
-fun F : forall (t : tm), P t => fun (a: alist tm) =>
-    let frcd_cons' := (fun i y r => frcd_cons i y r (F y) )
-    in frcd a (alist_rect tm Q frcd_nil frcd_cons' a).
-
- *)
-
-Definition subst' (x:id) (s:tm) :tm -> tm := 
-  tm_rect_nest (fun _ => tm) (fun _ => alist tm)
-    (fun y => if eq_id_dec x y then s else (tvar y))
-    (fun  t1 mt1 t2 mt2 => tapp mt1 mt2)
-    (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1))
-    (fun  t1 mt1 i => tproj mt1 i)
-    (fun r mr => trcd mr)
-    (nil)
-    (fun i t r mt mr => cons i mt mr).
 
 Definition substf_ok (sfunc:  id -> tm -> tm -> tm) :=
   sfunc a (tvar f) (tvar a) = tvar f
@@ -257,8 +305,7 @@ Definition substf_ok (sfunc:  id -> tm -> tm -> tm) :=
 Example subst_ok :substf_ok subst.
 Proof. unfold substf_ok. repeat split. Qed.
 
-Example subst'_ok :substf_ok subst'.
-Proof. unfold substf_ok. repeat split. Qed.
+(* Some other stuff: *)
 
 Fixpoint alist_all {T : Type} (P : T-> Prop) (a: alist T) : Prop :=
   match a with
@@ -271,7 +318,7 @@ Definition tm_rect_nest_map
   (fapp : tm -> tm -> tm -> tm -> tm)
   (fabs : id -> ty ->  tm -> tm -> tm)
   (fproj : tm -> tm -> id -> tm)
- := tm_rect_nest
+ := tm_nest_rect
       (fun _ => tm)  (fun _ => alist tm) fvar fapp fabs fproj
       (fun r mr => trcd mr) nil (fun i t r mt mr => cons i mt mr).
 
@@ -299,7 +346,7 @@ Proof. unfold substf_ok. repeat split. Qed.
 
 
 Definition tm_id (t : tm) : tm := 
-  tm_rect_nest (fun _ => tm) (fun _ => alist tm)
+  tm_nest_rect (fun _ => tm) (fun _ => alist tm)
     (fun y => tvar y)
     (fun  t1 mt1 t2 mt2 => tapp mt1 mt2)
     (fun y T t1 mt1 =>  tabs y T t1)
@@ -314,75 +361,25 @@ Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
 Proof. reflexivity. Qed.
 
 
-(*
- Inductive ty : Type :=
-  | TBase     : id -> ty
-  | TArrow    : ty -> ty -> ty
-  | TRcd      : (alist ty) -> ty.
- *)
-Definition ty_nested_rect  (P: ty -> Type) (Q: alist ty -> Type)
-  (fTBase : forall i : id, P (TBase i))
-  (fTArrow : forall t : ty,
-        P t -> forall t0 : ty, P t0 -> P (TArrow t t0))
-  (fTRcd' : forall r : alist ty, Q r -> P (TRcd r))
-  (fTRcd_nil' : Q nil)
-  (fTRcd_cons' : forall (i : id) (t : ty) (a : alist ty), P t -> Q a -> Q (cons i t a))
- := fix F (t : ty) : P t :=
-    let fTRcd_cons  i y r :=  fTRcd_cons' i y r (F y) 
-    in let fTRcd r :=  fTRcd' r (alist_rect ty Q fTRcd_nil' fTRcd_cons r)
-    in ty_rect P fTBase fTArrow fTRcd t.
-
-(* WAS
-Definition ty_nested_rect  (P: ty -> Type) (Q: alist ty -> Type)
-  (fTBase : forall i : id, P (TBase i))
-  (fTArrow : forall t : ty,
-        P t -> forall t0 : ty, P t0 -> P (TArrow t t0))
-  (fTRcd : forall r : alist ty, Q r -> P (TRcd r))
-  (fTRcd_nil : Q nil)
-  (fTRcd_cons : forall (i : id) (t : ty) (a : alist ty), P t -> Q a -> Q (cons i t a))
- := fix F (t : ty) : P t := 
-  match t as t0 return (P t0) with
-    | TBase i => fTBase i
-    | TArrow t0 t1 => fTArrow t0 (F t0) t1 (F t1)
-    | TRcd r => let frcd_cons' := (fun i y r' => fTRcd_cons i y r' (F y) )
-      in fTRcd r (alist_rect ty Q fTRcd_nil frcd_cons' r)
-  end.
-
- *)
-(* 
-Definition subst' (x:id) (s:tm) : tm -> tm :=
-  fix F t :=
-    match t with
-      | tvar y => if eq_id_dec x y then s else t
-      | tabs y T t1 =>  tabs y T (if eq_id_dec x y then t1 else (F t1))
-      | tapp t1 t2 => tapp (F t1) (F t2)
-      | tproj t1 i => tproj (F t1) i
-      | trcd nil => trcd nil
-      | trcd (cons i t1 r) => let sr := (match (F (trcd r)) with trcd r' => r' end) 
-          in trcd (cons i (F t1) sr)
-    end.
-
- *)(* 
-Definition subst (x:id) (s:tm) : tm -> tm :=
-  fix F t :=
-    match t with
-      | tvar y => if eq_id_dec x y then s else t
-      | tabs y T t1 =>  tabs y T (if eq_id_dec x y then t1 else (F t1))
-      | tapp t1 t2 => tapp (F t1) (F t2)
-      | tproj t1 i => tproj (F t1) i
-      | trcd r => trcd (map (fun (x:tm) =>(F x)) r) (* (map F r) *)
-    end.
-
- *)(* 
-
-with rsubst (x:id) (s:tm) (a: alist tm) {struct a} : alist tm := 
-
- *)
-
-Notation "'[' x ':=' s ']' t" := (subst x s t) (at level 20).
-
 (* ###################################################################### *)
-(** *** Reduction *)
+
+(** ** Reduction:
+<<
+                                 ti ==> ti'                            (ST_Rcd)
+    --------------------------------------------------------------------  
+    {i1=v1, ..., im=vm, in=tn, ...} ==> {i1=v1, ..., im=vm, in=tn', ...}
+
+                                 t1 ==> t1'
+                               --------------                        (ST_Proj1)
+                               t1.i ==> t1'.i
+
+                          -------------------------                (ST_ProjRcd)
+                          {..., i=vi, ...}.i ==> vi
+>> 
+*)
+
+
+(** *** Values *)
 
 (** Next we define the values of our language.  A record is a value if
     all of its fields are. *)
@@ -391,36 +388,29 @@ Inductive value : tm -> Prop :=
   | v_abs : forall x T11 t12,
       value (tabs x T11 t12)
   | v_rcd : forall r, value_rcd r -> value (trcd r)
+
 with value_rcd : (alist tm) -> Prop :=
   | vr_nil : value_rcd nil
-  | vr_cons : forall i v1 vr,
+  | vr_cons : forall x v1 vr,
       value v1 ->
       value_rcd vr ->
-      value_rcd (cons i v1 vr).
+      value_rcd (cons x v1 vr)
+.
 
-(*Inductive value : tm -> Prop :=
-  | v_abs : forall x T11 t12,
-      value (tabs x T11 t12)
-  | v_rnil : value trnil
-  | v_rcons : forall i v1 vr,
-      value v1 ->
-      value vr ->
-      value (trcons i v1 vr).
-*)
-Hint Constructors value.
+Hint Constructors value value_rcd.
 
 (** Utility functions for extracting one field from record type or
     term: *)
 
-Fixpoint Tlookup (i:id) (Tr:ty) : option ty :=
+Fixpoint Tlookup (x:id) (Tr:ty) : option ty :=
   match Tr with
-  | TRCons i' T Tr' => if eq_id_dec i i' then Some T else Tlookup i Tr'
+  | TRcd RT => lookup x RT
   | _ => None
   end.
 
-Fixpoint tlookup (i:id) (tr:tm) : option tm :=
+Fixpoint tlookup (x:id) (tr:tm) : option tm :=
   match tr with
-  | trcons i' t tr' => if eq_id_dec i i' then Some t else tlookup i tr'
+  | trcd r => lookup x r
   | _ => None
   end.
 
@@ -429,6 +419,7 @@ Fixpoint tlookup (i:id) (tr:tm) : option tm :=
     [has_type]. *)
 
 Reserved Notation "t1 '==>' t2" (at level 40).
+Reserved Notation "r1 '*==>' r2" (at level 40).
 
 Inductive step : tm -> tm -> Prop :=
   | ST_AppAbs : forall x T11 t12 v2,
@@ -444,33 +435,64 @@ Inductive step : tm -> tm -> Prop :=
   | ST_Proj1 : forall t1 t1' i,
         t1 ==> t1' ->
         (tproj t1 i) ==> (tproj t1' i)
-  | ST_ProjRcd : forall tr i vi,
-        value tr ->
-        tlookup i tr = Some vi ->
-        (tproj tr i) ==> vi
-  | ST_Rcd_Head : forall i t1 t1' tr2,
-        t1 ==> t1' ->
-        (trcons i t1 tr2) ==> (trcons i t1' tr2)
-  | ST_Rcd_Tail : forall i v1 tr2 tr2',
-        value v1 ->
-        tr2 ==> tr2' ->
-        (trcons i v1 tr2) ==> (trcons i v1 tr2')
+  | ST_ProjRcd : forall r x vx,
+        value_rcd r ->
+        lookup x r = Some vx ->
+        (tproj (trcd r) x) ==> vx
+  | ST_Rcd : forall r r',
+        r *==> r' ->
+        (trcd r) ==> (trcd r')
+with step_rcd : (alist tm) -> (alist tm) -> Prop := 
+  | STR_Head : forall x t t' r,
+        t ==> t' ->
+        (cons x t r) *==> (cons x t' r)
+  | STR_Tail : forall x v r r',
+        value v ->
+        r *==> r' ->
+        (cons x v r) *==> (cons x v r')
 
-where "t1 '==>' t2" := (step t1 t2).
+where "t1 '==>' t2" := (step t1 t2)
+and "r1 '*==>' r2" := (step_rcd r1 r2).
 
 Tactic Notation "step_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "ST_AppAbs" | Case_aux c "ST_App1" | Case_aux c "ST_App2"
-  | Case_aux c "ST_Proj1" | Case_aux c "ST_ProjRcd"
-  | Case_aux c "ST_Rcd_Head" | Case_aux c "ST_Rcd_Tail" ].
+  | Case_aux c "ST_Proj1" | Case_aux c "ST_ProjRcd" | Case_aux c "ST_Rcd" ].
+
+Tactic Notation "step_rcd_cases" tactic(first) ident(c) :=
+  first;
+  [ Case_aux c "STR_Head" | Case_aux c "STR_Tail" ].
 
 Notation multistep := (multi step).
 Notation "t1 '==>*' t2" := (multistep t1 t2) (at level 40).
 
-Hint Constructors step.
+Hint Constructors step step_rcd.
+ 
 
 (* ###################################################################### *)
-(** *** Typing *)
+(** ** Typing:
+<<
+                                 ti ==> ti'                            (ST_Rcd)
+    --------------------------------------------------------------------  
+    {i1=v1, ..., im=vm, in=tn, ...} ==> {i1=v1, ..., im=vm, in=tn', ...}
+
+                                 t1 ==> t1'
+                               --------------                        (ST_Proj1)
+                               t1.i ==> t1'.i
+
+                          -------------------------                (ST_ProjRcd)
+                          {..., i=vi, ...}.i ==> vi
+   Typing:
+               Gamma |- t1 : T1     ...     Gamma |- tn : Tn
+             --------------------------------------------------         (T_Rcd)
+             Gamma |- {i1=t1, ..., in=tn} : {i1:T1, ..., in:Tn}
+
+                       Gamma |- t : {..., i:Ti, ...}
+                       -----------------------------                   (T_Proj)
+                             Gamma |- t.i : Ti
+>> 
+*)
+
 
 Definition context := partial_map ty.
 
@@ -501,8 +523,39 @@ Definition context := partial_map ty.
     check comes in the [tnil] case.  *)
 
 Reserved Notation "Gamma '|-' t '\in' T" (at level 40).
+Reserved Notation "Gamma '|-' r '*\in' Tr" (at level 40).
 
 Inductive has_type : context -> tm -> ty -> Prop :=
+  | T_Var : forall Gamma x T,
+      Gamma x = Some T ->
+      Gamma |- (tvar x) \in T
+  | T_Abs : forall Gamma x T1 T2 tb,
+      (extend Gamma x T1) |- tb \in T2 -> 
+      Gamma |- (tabs x T1 tb) \in (TArrow T1 T2)
+  | T_App : forall T1 T2 Gamma t1 t2,
+      Gamma |- t1 \in (TArrow T1 T2) -> 
+      Gamma |- t2 \in T1 -> 
+      Gamma |- (tapp t1 t2) \in T2
+  (* records: *)
+  | T_Proj : forall Gamma x t Tx Tr,
+      Gamma |- t \in (TRcd Tr) ->
+      lookup x Tr = Some Tx ->
+      Gamma |- (tproj t x) \in Tx
+  | T_Rcd : forall Gamma tr Tr,
+      Gamma |- tr *\in Tr ->
+      Gamma |- (trcd tr) \in (TRcd Tr)
+with rcd_has_type : context -> (alist tm) -> (alist ty) -> Prop :=
+  | TR_Nil : forall Gamma,
+      Gamma |- nil *\in nil
+  | TR_Cons : forall Gamma x t T tr Tr,
+      Gamma |- t \in T ->
+      Gamma |- tr *\in Tr ->
+      Gamma |- (cons x t tr) *\in (cons x T Tr)
+
+where "Gamma '|-' t '\in' T" := (has_type Gamma t T)
+and   "Gamma '|-' r '*\in' Tr" := (rcd_has_type Gamma r Tr).
+
+(* Inductive has_type : context -> tm -> ty -> Prop :=
   | T_Var : forall Gamma x T,
       Gamma x = Some T ->
       well_formed_ty T ->
@@ -528,16 +581,33 @@ Inductive has_type : context -> tm -> ty -> Prop :=
       record_ty Tr ->
       record_tm tr ->
       Gamma |- (trcons i t tr) \in (TRCons i T Tr)
-
-where "Gamma '|-' t '\in' T" := (has_type Gamma t T).
-
-Hint Constructors has_type.
+ *)
+Hint Constructors has_type rcd_has_type.
 
 Tactic Notation "has_type_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "T_Var" | Case_aux c "T_Abs" | Case_aux c "T_App"
-  | Case_aux c "T_Proj" | Case_aux c "T_RNil" | Case_aux c "T_RCons" ].
+  | Case_aux c "T_Proj" | Case_aux c "T_Rcd" ].
 
+Tactic Notation "rcd_has_type_cases" tactic(first) ident(c) :=
+  first;
+  [ Case_aux c "TR_Nil" | Case_aux c "TR_Cons" ].
+
+Scheme has_type_ind_both := Minimality for has_type Sort Prop
+with rcd_has_type_ind_both := Minimality for rcd_has_type Sort Prop.
+
+Tactic Notation "has_type_both_cases" tactic(first) ident(c) :=
+  first;
+  [ Case_aux c "T_Var" | Case_aux c "T_Abs" | Case_aux c "T_App"
+  | Case_aux c "T_Proj" | Case_aux c "T_TR" 
+  | Case_aux c "TR_Nil" | Case_aux c "TR_Cons" ].
+
+
+(*
+rcd_has_type_ind_dep is defined
+has_type_ind_both is defined
+has_type_ind_both, rcd_has_type_ind_dep are recursively defined
+*)
 (* ###################################################################### *)
 (** ** Examples *)
 
@@ -552,36 +622,47 @@ Tactic Notation "has_type_cases" tactic(first) ident(c) :=
 
 Lemma typing_example_2 : 
   empty |- 
-    (tapp (tabs a (TRCons i1 (TArrow A A)
-                      (TRCons i2 (TArrow B B)
-                       TRNil))
+    (tapp (tabs a (TRcd (cons i1 (TArrow A A)
+                            (cons i2 (TArrow B B)
+                            nil)))
               (tproj (tvar a) i2))
-            (trcons i1 (tabs a A (tvar a)) 
-            (trcons i2 (tabs a B (tvar a))
-             trnil))) \in
+            (trcd (cons i1 (tabs a A (tvar a)) 
+              (cons i2 (tabs a B (tvar a))
+              nil))) ) \in
     (TArrow B B).
-Proof. 
-  (* FILL IN HERE *) Admitted.
+Proof. eauto 15 using extend_eq. Qed.
+(*
+  eapply T_App.
+    eapply T_Abs. eapply T_Proj.
+      apply T_Var. unfold extend. apply eq_id.
+      reflexivity. 
+    apply T_Rcd. apply TR_Cons.
+      apply T_Abs. apply T_Var. apply extend_eq.
+      apply TR_Cons.
+        apply T_Abs. apply T_Var. apply extend_eq.
+        apply TR_Nil.
+*)
 
 (** Before starting to prove this fact (or the one above!), make sure
     you understand what it is saying. *)
 
 Example typing_nonexample : 
   ~ exists T,
-      (extend empty a (TRCons i2 (TArrow A A) 
-                                TRNil)) |-
-               (trcons i1 (tabs a B (tvar a)) (tvar a)) \in
+      (extend empty a (TRcd (cons i2 (TArrow A A) nil)))  |-
+               (trcd (cons i1 (tabs a B (tvar a)) nil)) \in
                T.
+  (* no T | a : { i2 : A->A } |- { i1 = λ a:B . a } : T *)
 Proof.
   (* FILL IN HERE *) Admitted.
 
 Example typing_nonexample_2 : forall y,
   ~ exists T,
     (extend empty y A) |-
-           (tapp (tabs a (TRCons i1 A TRNil)
+           (tapp (tabs a (TRcd (cons i1 A nil))
                      (tproj (tvar a) i1))
-                   (trcons i1 (tvar y) (trcons i2 (tvar y) trnil))) \in
+                   (trcd (cons i1 (tvar y) (cons i2 (tvar y) nil))) ) \in
            T.
+  (* forall y, ~ exists T, y : A |- (λ a : { i1 : A} . a.i1) { i1 = y; i2 = y } : T *)
 Proof.
   (* FILL IN HERE *) Admitted.
 
@@ -595,6 +676,7 @@ Proof.
 (* ###################################################################### *)
 (** *** Well-Formedness *)
 
+(*
 Lemma wf_rcd_lookup : forall i T Ti,
   well_formed_ty T ->
   Tlookup i T = Some Ti ->
@@ -626,6 +708,7 @@ Proof with eauto.
   Case "T_Proj".
     eapply wf_rcd_lookup...
 Qed.
+*)
 
 (* ###################################################################### *)
 (** *** Field Lookup *)
@@ -655,7 +738,7 @@ Qed.
         and 
         tlookup i t = tlookup i tr,
         so the result follows from the induction hypothesis. [] *)
-
+(*
 Lemma lookup_field_in_value : forall v T i Ti,
   value v ->
   empty |- v \in T ->
@@ -673,6 +756,119 @@ Proof with eauto.
     SCase "get tail".
       destruct IHHtyp2 as [vi [Hgeti Htypi]]...
       inversion Hval... Qed.
+*)
+(* deal with 
+
+H : lookup x Tr = Some Tx
+Ht : \empty |- t \in TRcd Tr
+H0 : value t
+______________________________________(1/3)
+exists t', tproj t x ==> t'
+ *)
+
+Lemma lookup_cons_eq : 
+  forall T x (v : T) (a : alist T),
+    lookup x (cons x v a) = Some v.
+Proof.
+  intros. simpl. apply eq_id.
+Qed.
+
+Lemma lookup_cons_neq :
+  forall T x y (v : T) (a : alist T),
+    x <> y ->
+    lookup x (cons y v a) = lookup x a.
+Proof.
+  intros. simpl. apply neq_id. apply H.
+Qed.
+
+
+Lemma record_body_lookup : 
+  forall rb Gamma Trb x Tx,
+    value_rcd rb ->
+    Gamma |- rb *\in Trb ->
+    lookup x Trb = Some Tx ->
+    exists vx, lookup x rb = Some vx /\ Gamma |- vx \in Tx.
+Proof.
+  intros rb Gamma Tr x Tx Hv Ht Hl.
+  induction Ht as [| G y vy Ty rb' Trb' Hty Ht]. 
+  (* induction 2 as [| G y vy Ty rb' Trb' Hty Ht]; intro Hl. *)
+  Case "nil". inversion Hl.
+  Case "cons".
+    inversion Hv; subst; clear Hv.
+    destruct (eq_id_dec x y).
+      SCase "x=y". subst. 
+        rewrite (lookup_cons_eq _ y Ty Trb' ) in Hl. inversion Hl; subst; clear Hl.
+        exists vy. split.
+          apply lookup_cons_eq.
+          apply Hty.
+      SCase "x<>y".
+        rewrite (lookup_cons_neq _ x y Ty _ n) in Hl. 
+        destruct (IHHt H3 Hl) as [vx [Hlx HTx]].
+        exists vx. split.
+          rewrite (lookup_cons_neq _ x y _ _ n). apply Hlx.
+        apply HTx.
+Qed.
+
+(*
+Lemma proj_field_in_record : 
+  forall tr Tr x Tx,
+    value tr ->
+    empty |- tr \in (TRcd Tr) ->
+    lookup x Tr = Some Tx ->
+    exists tx, (tproj tr x) = tx /\ empty |- tx \in Tx.
+Proof.
+  intros tr Tr x Tx Hv HTtr Hlookup.
+  inversion Hv; subst; inversion HTtr; subst; clear Hv HTtr.
+  destruct (record_body_lookup r \empty _ x Tx H H3 Hlookup) as [ vx [ Hlxr Htx]].
+  exists vx. split.
+    apply T_Proj.
+
+  assert (Hrb := record_body_lookup r \empty _ x Tx H H3 Hlookup).
+
+  assert (Hex: exists tx, lookup x r = Some tx
+
+  inversion HTtr; subst; clear HTtr.
+    inversion H.
+*)
+
+(* An attempt at moving Q down to where it comes up: 
+
+Definition has_type_ind_both' (P : context -> tm -> ty -> Prop)  
+      (fvar : forall (Gamma : id -> option ty) (x : id) (T : ty),
+        Gamma x = Some T -> P Gamma (tvar x) T)
+      (fabs : forall (Gamma : partial_map ty) (x : id) (T1 T2 : ty) (tb : tm),
+        extend Gamma x T1 |- tb \in T2 ->
+        P (extend Gamma x T1) tb T2 -> P Gamma (tabs x T1 tb) (TArrow T1 T2))
+      (fapp : forall (T1 T2 : ty) (Gamma : context) (t1 t2 : tm),
+        Gamma |- t1 \in TArrow T1 T2 ->
+        P Gamma t1 (TArrow T1 T2) ->
+        Gamma |- t2 \in T1 -> P Gamma t2 T1 -> P Gamma (tapp t1 t2) T2)
+      (fproj : forall (Gamma : context) (x : id) (t : tm) (Tx : ty) (Tr : alist ty),
+        Gamma |- t \in TRcd Tr ->
+        P Gamma t (TRcd Tr) -> lookup x Tr = Some Tx -> P Gamma (tproj t x) Tx)
+      (frcd' : forall (Gamma : context) (tr : alist tm) (Tr : alist ty),
+        rcd_has_type Gamma tr Tr ->
+          (forall (Q : context -> alist tm -> alist ty -> Prop), 
+            (forall (Gamma : context) (tr : alist tm) (Tr : alist ty),
+              rcd_has_type Gamma tr Tr -> Q Gamma tr Tr -> P Gamma (trcd tr) (TRcd Tr)) ->
+            (forall Gamma : context, Q Gamma nil nil) ->
+            ((forall (Gamma : context) (x : id) (t : tm) (T : ty) (tr : alist tm) (Tr : alist ty),
+              Gamma |- t \in T -> P Gamma t T ->
+              rcd_has_type Gamma tr Tr -> Q Gamma tr Tr -> Q Gamma (cons x t tr) (cons x T Tr))))
+          -> P Gamma (trcd tr) (TRcd Tr))
+    : forall (c : context) (t : tm) (t0 : ty), c |- t \in t0 -> P c t t0.
+Proof.
+  refine (has_type_ind P fvar fabs fapp fproj _).
+  intros G t T Hty. apply (frcd' G _ _ Hty).
+  intros Q frcd fnil fcons.
+
+refine (has_type_ind P fvar fabs fapp fproj _ G t T Hty).
+   
+  := 
+    match RCD with ex_intro Q (conj frcd (conj frnil frcons)) => 
+      has_type_ind_both P Q fvar fabs fapp fproj frcd frnil frcons
+    end.
+*)
 
 (* ###################################################################### *)
 (** *** Progress *)
@@ -688,16 +884,24 @@ Proof with eauto.
   intros t T Ht.
   remember (@empty ty) as Gamma.
   generalize dependent HeqGamma.
-  has_type_cases (induction Ht) Case; intros HeqGamma; subst.
+  Ltac p_ind_tactic Ht := induction Ht using has_type_ind_both
+    with (P0 := fun G tr Tr => 
+       G = \empty -> 
+       value_rcd tr \/ (exists tr', tr *==> tr')).
+  has_type_both_cases (p_ind_tactic Ht) Case; intros HeqGamma; subst.
+  (* was:  has_type_cases (induction Ht) Case; intros HeqGamma; subst. *)
+
   Case "T_Var".
     (* The final rule in the given typing derivation cannot be [T_Var],
        since it can never be the case that [empty |- x : T] (since the
        context is empty). *)
     inversion H.
+
   Case "T_Abs".
     (* If the [T_Abs] rule was the last used, then [t = tabs x T11 t12],
        which is a value. *)
     left...
+
   Case "T_App".
     (* If the last rule applied was T_App, then [t = t1 t2], and we know 
        from the form of the rule that
@@ -723,6 +927,7 @@ Proof with eauto.
     SCase "t1 steps".
       (* Finally, If [t1 ==> t1'], then [t1 t2 ==> t1' t2] by [ST_App1]. *)
       destruct H as [t1' Hstp]. exists (tapp t1' t2)...
+
   Case "T_Proj".
     (* If the last rule in the given derivation is [T_Proj], then 
        [t = tproj t i] and
@@ -730,45 +935,46 @@ Proof with eauto.
        By the IH, [t] either is a value or takes a step. *)
     right. destruct IHHt...
     SCase "rcd is value".
+      (* Starting here, this differs from SF. *)
       (* If [t] is a value, then we may use lemma
-         [lookup_field_in_value] to show [tlookup i t = Some ti] for
-         some [ti] which gives us [tproj i t ==> ti] by [ST_ProjRcd]
-         *)
-      destruct (lookup_field_in_value _ _ _ _ H0 Ht H) as [ti [Hlkup _]].
-      exists ti...
+         [record_body_lookup] to show [lookup x tr = Some vx] for
+         some [vx] which gives us [tproj i t ==> ti] by [ST_ProjRcd].  *)
+      inversion Ht; subst; clear Ht; try solve by inversion...
+      inversion H0; subst; clear H0.
+      destruct (record_body_lookup _ \empty _ x Tx H2 H4 H) as [vx [ Hlxr Htx]].
+      exists vx. apply (ST_ProjRcd _ _ _ H2 Hlxr).
     SCase "rcd_steps".
       (* On the other hand, if [t ==> t'], then [tproj t i ==> tproj t' i]
          by [ST_Proj1]. *)
-      destruct H0 as [t' Hstp]. exists (tproj t' i)...
-  Case "T_RNil".
-    (* If the last rule in the given derivation is [T_RNil], then 
-       [t = trnil], which is a value. *)
-    left...
-  Case "T_RCons".
-    (* If the last rule is [T_RCons], then [t = trcons i t tr] and
-         [empty |- t : T]
-         [empty |- tr : Tr]
-       By the IH, each of [t] and [tr] either is a value or can take
-       a step. *)
-    destruct IHHt1...
-    SCase "head is a value".
-      destruct IHHt2; try reflexivity.
-      SSCase "tail is a value".
-      (* If [t] and [tr] are both values, then [trcons i t tr]
-         is a value as well. *)
-        left...
-      SSCase "tail steps".
-        (* If [t] is a value and [tr ==> tr'], then 
-           [trcons i t tr ==> trcons i t tr'] by 
-           [ST_Rcd_Tail]. *)
-        right. destruct H2 as [tr' Hstp].
-        exists (trcons i t tr')...
-    SCase "head steps".      
-      (* If [t ==> t'], then 
-         [trcons i t tr ==> trcons i t' tr] 
-         by [ST_Rcd_Head]. *)
-      right. destruct H1 as [t' Hstp].
-      exists (trcons i t' tr)...  Qed.
+      destruct H0 as [t' Hstp]. exists (tproj t' x)...
+
+  Case "T_TR".
+    (* If the last rule in the given derivation is [T_Rcd], then 
+       [t = (trcd tr)], [T=(Trcd Tr)] and [empty |- tr *: Tr]. 
+      The combined induction rule requires that P0->P 
+      which is what we establish here. *)
+    destruct (IHHt eq_refl) as [Hv | [tr' Hst]]; clear IHHt.
+      SCase "value_rcd tr". left. apply (v_rcd _ Hv).
+      SCase "tr *==> tr". right. exists (trcd tr'). apply (ST_Rcd _ _ Hst).
+
+  Case "TR_Nil". 
+    (* If the last rule was [T_Rcd] established by [TR_Nil], it's a value. *)
+    left. apply vr_nil.
+
+  Case "TR_Cons".
+    (* If the last rule was [T_Rcd] established by [TR_Cons], then 
+          [tr = cons x t tr],
+          [Tr = cons x T Tr],
+          [ empty |- t : Tx] and
+          [empty |- tr *: Tr].
+        By the P IH, either t is a value or it steps and
+        by the P0 IH, either tr is a value or it steps. *)
+    destruct (IHHt eq_refl) as [ Hvt | [ t' Hstt' ]]; clear IHHt.
+      SSCase "value t". destruct (IHHt0 eq_refl) as [ Hvtr | [ tr' Hsttr' ]]; clear IHHt0.
+        SSSCase "value_rcd tr". left. apply (vr_cons _ _ _ Hvt Hvtr).
+        SSSCase "tr *==> tr'". right. eexists. apply (STR_Tail _ _ _ _ Hvt Hsttr').
+      SSCase "t ==> t'". right. eexists. apply (STR_Head _ _ _ _ Hstt').
+Qed.
 
 (* ###################################################################### *)
 (** *** Context Invariance *)
@@ -787,14 +993,18 @@ Inductive appears_free_in : id -> tm -> Prop :=
   | afi_proj : forall x t i,
      appears_free_in x t ->
      appears_free_in x (tproj t i)
-  | afi_rhead : forall x i ti tr,
+  | afi_rcd : forall x r,
+     appears_free_in_rcd x r -> 
+     appears_free_in x (trcd r)
+with appears_free_in_rcd : id -> (alist tm) -> Prop :=
+  | afi_rhead : forall x i ti r',
       appears_free_in x ti ->
-      appears_free_in x (trcons i ti tr)
-  | afi_rtail : forall x i ti tr,
-      appears_free_in x tr ->
-      appears_free_in x (trcons i ti tr).
+      appears_free_in_rcd x (cons i ti r')
+  | afi_rtail : forall x i ti r',
+      appears_free_in_rcd x r' ->
+      appears_free_in_rcd x (cons i ti r').
 
-Hint Constructors appears_free_in.
+Hint Constructors appears_free_in appears_free_in_rcd.
 
 Lemma context_invariance : forall Gamma Gamma' t S,
      Gamma |- t \in S  ->
@@ -802,8 +1012,12 @@ Lemma context_invariance : forall Gamma Gamma' t S,
      Gamma' |- t \in S.
 Proof with eauto.
   intros. generalize dependent Gamma'.
-  has_type_cases (induction H) Case; 
-    intros Gamma' Heqv...
+  Ltac ci_ind_tactic H := induction H using has_type_ind_both with 
+         (P0 := fun Gamma r RS => 
+                forall Gamma' : id -> option ty,
+                (forall x : id, appears_free_in_rcd x r -> Gamma x = Gamma' x) ->
+                Gamma' |- r *\in RS).
+  has_type_both_cases (ci_ind_tactic H) Case; intros Gamma' Heqv...
   Case "T_Var".
     apply T_Var... rewrite <- Heqv...
   Case "T_Abs".
@@ -811,8 +1025,10 @@ Proof with eauto.
     unfold extend. destruct (eq_id_dec x y)...
   Case "T_App".
     apply T_App with T1...
-  Case "T_RCons".
-    apply T_RCons...  Qed.
+  Case "TR_Cons".
+    apply TR_Cons...
+Qed.
+
 
 Lemma free_in_context : forall x t T Gamma,
    appears_free_in x t ->
@@ -820,12 +1036,19 @@ Lemma free_in_context : forall x t T Gamma,
    exists T', Gamma x = Some T'.
 Proof with eauto.
   intros x t T Gamma Hafi Htyp.
-  has_type_cases (induction Htyp) Case; inversion Hafi; subst...
+  Ltac fic_ind_tactic H x := induction H using has_type_ind_both with 
+      (P0 := fun Gamma r RS => 
+             appears_free_in_rcd x r ->
+             Gamma |- r *\in RS ->
+             exists T', Gamma x = Some T').
+  has_type_both_cases (fic_ind_tactic Htyp x) Case; 
+    inversion Hafi; subst...
   Case "T_Abs".
     destruct IHHtyp as [T' Hctx]... exists T'.
     unfold extend in Hctx. 
     rewrite neq_id in Hctx... 
 Qed.
+
 
 (* ###################################################################### *)
 (** *** Preservation *)
@@ -845,8 +1068,12 @@ Proof with eauto.
      variables interact. In the case of trcons, we must do a little
      extra work to show that substituting into a term doesn't change
      whether it is a record term. *)
-  t_cases (induction t) Case;
-    intros S Gamma Htypt; simpl; inversion Htypt; subst...
+  Ltac spt_induction t x v U := induction t using tm_nest_rect with (Q := fun r =>
+      forall (RT : alist ty) (Gamma : partial_map ty),
+      rcd_has_type (extend Gamma x U) r RT -> 
+      rcd_has_type Gamma (subst_rcd x v r) RT).
+  (*t_cases (induction t) Case;*)
+    spt_induction t x v U; intros S Gamma Htypt; simpl; inversion Htypt; subst...
   Case "tvar".
     simpl. rename i into y.
     (* If t = y, we know that
@@ -863,8 +1090,8 @@ Proof with eauto.
        [Gamma |- v : U].  We have already proven a more general version
        of this theorem, called context invariance. *)
       subst.
-      unfold extend in H0. rewrite eq_id in H0. 
-      inversion H0; subst. clear H0.
+      unfold extend in H1. rewrite eq_id in H1. 
+      inversion H1; subst. clear H1.
       eapply context_invariance...
       intros x Hcontra.
       destruct (free_in_context _ _ S empty Hcontra) as [T' HT']...
@@ -872,7 +1099,7 @@ Proof with eauto.
     SCase "x<>y".
     (* If [x <> y], then [Gamma y = Some S] and the substitution has no
        effect.  We can show that [Gamma |- y : S] by [T_Var]. *)
-      apply T_Var... unfold extend in H0. rewrite neq_id in H0... 
+      apply T_Var... unfold extend in H1. rewrite neq_id in H1...
   Case "tabs".
     rename i into y. rename t into T11.
     (* If [t = tabs y T11 t0], then we know that
@@ -909,9 +1136,11 @@ Proof with eauto.
       intros z Hafi. unfold extend.
       destruct (eq_id_dec y z)... 
       subst. rewrite neq_id...
-  Case "trcons".
-    apply T_RCons... inversion H7; subst; simpl...
+  Case "trcons". 
+    rewrite <- (subst_rcd_eqv x v a)...
 Qed.
+
+(* ---- HERE ---- *)
 
 Theorem preservation : forall t t' T,
      empty |- t \in T  ->
@@ -925,8 +1154,16 @@ Proof with eauto.
   (* Proof: By induction on the given typing derivation.  Many cases are
      contradictory ([T_Var], [T_Abs]) or follow directly from the IH
      ([T_RCons]).  We show just the interesting ones. *)
-  has_type_cases (induction HT) Case; 
-    intros t' HeqGamma HE; subst; inversion HE; subst...
+  Ltac pres_ind_tactic HT := induction HT using has_type_ind_both
+    with (P0 := fun Gamma tr Tr => forall tr' : alist tm,
+       Gamma = \empty -> 
+       (* Gamma |- tr *\in Tr ->*)
+       tr *==> tr' ->
+       Gamma |- tr' *\in Tr).
+  has_type_both_cases (pres_ind_tactic HT) Case; 
+    intros ? HeqGamma HE; subst; inversion HE; subst... 
+  (* was has_type_cases (induction HT) Case; 
+    intros t' HeqGamma HE; subst; inversion HE; subst... *)
   Case "T_App".
     (* If the last rule used was [T_App], then [t = t1 t2], and three rules
        could have been used to show [t ==> t']: [ST_App1], [ST_App2], and 
@@ -958,20 +1195,13 @@ Proof with eauto.
      Ti] for some [i] and [Tr].  We may therefore apply lemma
      [lookup_field_in_value] to find the record element this
      projection steps to. *)
-    destruct (lookup_field_in_value _ _ _ _ H2 HT H)
-      as [vi [Hget Htyp]].
-    rewrite H4 in Hget. inversion Hget. subst...
-  Case "T_RCons".
-  (* If the last rule was [T_RCons], then [t = trcons i t tr] for
-     some [i], [t] and [tr] such that [record_tm tr].  If the step is
-     by [ST_Rcd_Head], the result is immediate by the IH.  If the step
-     is by [ST_Rcd_Tail], [tr ==> tr2'] for some [tr2'] and we must also
-     use lemma [step_preserves_record_tm] to show [record_tm tr2']. *)
-    apply T_RCons... eapply step_preserves_record_tm...
+    inversion HT; subst; clear HT.
+    destruct (record_body_lookup _ \empty _ _ _ H2 H5 H) as [vx [ Hlxr Htx]].
+    rewrite H4 in Hlxr. inversion Hlxr. subst...
 Qed.
 (** [] *)
 
-End STLCExtendedRecords.
+End Records.
 
 (** $Date: 2014-12-31 11:17:56 -0500 (Wed, 31 Dec 2014) $ *)
 
