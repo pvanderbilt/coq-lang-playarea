@@ -1,4 +1,4 @@
-MODULES := LDef LProps LEval Tests Tests2 LEProps LEProps3 Utils RecordsExt
+MODULES := Common LDef LProps LEval Tests Tests2 LEProps LEProps3 Utils RecordsExt
 VS      := $(MODULES:%=%.v)
 PSF			:= ../../Coq/pierce_software_foundations_3.2
 

@@ -8,7 +8,8 @@ Require Export SfLib.
 Require Import LibTactics.
 
 (* Require Export Stlc. *)
-Require Export LDef.
+Require Export Common LDef.
+Import P3Common.
 Import LDEF.
 
 Module Records.
@@ -16,7 +17,31 @@ Module Records.
 (* ###################################################################### *)
 
 (** *** Preliminary definitions (alists): *)
+(*
+Definition alist (T : Type) : Type := list (id * T).
 
+Fixpoint lookup {X: Type} (x: id) (a: alist X) : option X :=
+  match a with
+    | nil => None
+    | cons (y, v) a' => if eq_id_dec x y then (Some v) else (lookup x a')
+    end.
+
+Lemma lookup_cons_eq : 
+  forall T x (v : T) (a : alist T),
+    lookup x (cons (x, v) a) = Some v.
+Proof.
+  intros. simpl. apply eq_id.
+Qed.
+
+Lemma lookup_cons_neq :
+  forall T x y (v : T) (a : alist T),
+    x <> y ->
+    lookup x (cons (y, v) a) = lookup x a.
+Proof.
+  intros. simpl. apply neq_id. apply H.
+Qed.
+*)
+(*
 Inductive alist (T : Type) : Type :=
   | nil : alist T
   | cons : id -> T -> alist T  -> alist T.
@@ -54,7 +79,7 @@ Lemma lookup_cons_neq :
 Proof.
   intros. simpl. apply neq_id. apply H.
 Qed.
-
+*)
 
 (**  ** Syntax:
 <<
@@ -118,13 +143,12 @@ Notation i2 := (Id 8).
 
 (** [{ i1:A }] *)
 
-Example er1 : exists (t:ty), t = TRcd (cons i1 A (nil)).
+Example er1 : exists (t:ty), t = TRcd [(i1, A)].
 Proof. eauto. Qed.
 
 (** [{ i1:A->B, i2:A }] *)
 Example er2 : exists (t:ty), t = 
-  TRcd (cons i1 (TArrow A B) 
-           (cons i2 A (nil))).
+  TRcd [(i1, (TArrow A B)); (i2, A)].
 Proof. eauto. Qed.
 
 
@@ -163,30 +187,35 @@ Definition ty_nested_rect
     (fTRcd' : forall Trb : alist ty, Q Trb -> P (TRcd Trb))
       (fTRcd_nil' : Q nil)
       (fTRcd_cons' : forall (x : id) (T : ty) (Trb : alist ty), 
-                       P T -> Q Trb -> Q (cons x T Trb))
+                       P T -> Q Trb -> Q ((x, T) :: Trb))
   : forall T : ty, P T
   := fix F (T : ty) : P T :=
-    let fTRcd_cons x T Trb := fTRcd_cons' x T Trb (F T) 
-    in let fTRcd Trb := fTRcd' Trb (alist_rect ty Q fTRcd_nil' fTRcd_cons Trb)
+    let fTRcd_cons b Trb := match b with (x,T) => fTRcd_cons' x T Trb (F T) end
+    in let fTRcd Trb := fTRcd' Trb (list_rect Q fTRcd_nil' fTRcd_cons Trb)
     in ty_rect P fTBase fTArrow fTRcd T.
 
-(* WAS
-Definition ty_nested_rect  (P: ty -> Type) (Q: alist ty -> Type)
-  (fTBase : forall i : id, P (TBase i))
-  (fTArrow : forall t : ty,
-        P t -> forall t0 : ty, P t0 -> P (TArrow t t0))
-  (fTRcd : forall r : alist ty, Q r -> P (TRcd r))
-  (fTRcd_nil : Q nil)
-  (fTRcd_cons : forall (i : id) (t : ty) (a : alist ty), 
-      P t -> Q a -> Q (cons i t a))
- := fix F (t : ty) : P t := 
-  match t as t0 return (P t0) with
-    | TBase i => fTBase i
-    | TArrow t0 t1 => fTArrow t0 (F t0) t1 (F t1)
-    | TRcd r => let frcd_cons' := (fun i y r' => fTRcd_cons i y r' (F y) )
-      in fTRcd r (alist_rect ty Q fTRcd_nil frcd_cons' r)
-  end.
- *)
+Definition ty_nested_rect'
+  (P: ty -> Type) 
+  (Q: alist ty -> Type)
+    (fTBase : forall x : id, P (TBase x))
+    (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
+    (fTRcd' : forall Trb : alist ty, Q Trb -> P (TRcd Trb))
+      (fTRcd_nil' : Q nil)
+      (fTRcd_cons' : forall (x : id) (T : ty) (Trb : alist ty), 
+                       P T -> Q Trb -> Q ((x, T) :: Trb))
+  : forall T : ty, P T
+  := fix F (T : ty) : P T :=
+     let fix G (Trb : alist ty) : Q Trb :=
+         match Trb with
+           | nil => fTRcd_nil'
+           | (x,T) :: Trb' => fTRcd_cons' x T Trb' (F T) (G Trb')
+         end
+     in match T with
+       | TBase x => fTBase x
+       | TArrow T1 T2 => fTArrow T1 (F T1) T2 (F T2)
+       | TRcd Trb => fTRcd' Trb (G Trb)
+     end.
+
 
 (** *** Recursion on terms, [tm_nested_rect]
 
@@ -202,12 +231,12 @@ Definition tm_nest_rect
     (fproj : forall t : tm, P t -> forall x : id, P (tproj t x))
     (frcd' : forall rb : alist tm, Q rb -> P (trcd rb))
       (frcd_nil' : Q nil)
-      (frcd_cons' : forall (i : id) (t : tm) (rb : alist tm), 
-                      P t -> Q rb -> Q (cons i t rb))
+      (frcd_cons' : forall (x : id) (t : tm) (rb : alist tm), 
+                      P t -> Q rb -> Q ((x, t) :: rb))
   : forall t : tm, P t
   := fix F (t : tm) : P t := 
-    let frcd_cons x t rb := frcd_cons' x t rb (F t)
-    in let frcd rb := frcd' rb (alist_rect tm Q frcd_nil' frcd_cons rb)
+    let frcd_cons bxt rb := match bxt with (x,t) => frcd_cons' x t rb (F t) end
+    in let frcd rb := frcd' rb (list_rect Q frcd_nil' frcd_cons rb)
     in tm_rect P fvar fapp fabs fproj frcd t.
 
 Tactic Notation "t_both_cases" tactic(first) ident(c) :=
@@ -231,7 +260,7 @@ Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
   let rsubst := (fix rsubst  (a: alist tm) : alist tm := 
     match a with
       | nil => nil 
-      | cons i t r' => cons  i (subst x s t) (rsubst r')
+      | (i, t) :: r' => (i, (subst x s t)) :: (rsubst r')
     end)
   in
   match t with
@@ -251,7 +280,7 @@ Notation "'[' x ':=' s ']' t" := (subst x s t) (at level 20).
 Fixpoint subst_rcd (x:id) (s:tm) (a: alist tm) : alist tm := 
   match a with
     | nil => nil 
-    | cons i t rb' => cons  i (subst x s t) (subst_rcd x s rb')
+    | (i, t) :: rb' => (i, subst x s t) :: (subst_rcd x s rb')
   end.
 
 Notation "'[' x ':=' s ']*' r" := (subst_rcd x s r) (at level 20).
@@ -263,7 +292,7 @@ Lemma subst_rcd_eqv :
     ((fix rsubst (a0 : alist tm) : alist tm :=
          match a0 with
          | nil => nil
-         | cons i t r' => cons i ([x := s]t) (rsubst r')
+         | (i, t) :: r' => (i, [x := s]t) :: (rsubst r')
          end) a).
 Proof.
   intros. induction a.
@@ -285,7 +314,7 @@ Definition subst_ugly (x:id) (s:tm) :tm -> tm :=
     (fun t1 mt1 i => tproj mt1 i)                                     (* tproj t1 i *)
     (fun r mr => trcd mr)                                             (* trcd r *)
       (nil)                                                           (* r=nil *)
-      (fun i t r mt mr => cons i mt mr).                              (* r=cons i t r *)
+      (fun i t r mt mr => (i, mt) :: mr).                             (* r=cons i t r *)
 
 
 (*
@@ -328,7 +357,7 @@ Proof. unfold substf_ok. repeat split. Qed.
 Fixpoint alist_all {T : Type} (P : T-> Prop) (a: alist T) : Prop :=
   match a with
     | nil => True
-    | cons i t r => P t /\ alist_all P r
+    | (i, t) :: r => P t /\ alist_all P r
   end.
 
 Definition tm_rect_nest_map
@@ -338,18 +367,7 @@ Definition tm_rect_nest_map
   (fproj : tm -> tm -> id -> tm)
  := tm_nest_rect
       (fun _ => tm)  (fun _ => alist tm) fvar fapp fabs fproj
-      (fun r mr => trcd mr) nil (fun i t r mt mr => cons i mt mr).
-
-(* Inlined version, pointless. *)
-Definition tm_rect_nest_map'
-  (fvar : id -> tm)
-  (fapp : tm -> tm -> tm -> tm -> tm)
-  (fabs : id -> ty ->  tm -> tm -> tm)
-  (fproj : tm -> tm -> id -> tm)
- := fix F (t : tm) : tm :=
-    let frcd_cons i y r mr := cons i (F y) mr
-    in let frcd  r := trcd (alist_rect tm  (fun _ => alist tm) nil frcd_cons r)
-    in tm_rect (fun _ => tm) fvar fapp fabs fproj frcd t.
+      (fun r mr => trcd mr) nil (fun i t r mt mr => (i, mt) :: mr).
 
 
 Definition subst'' (x:id) (s:tm) :tm -> tm := 
@@ -371,7 +389,7 @@ Definition tm_id (t : tm) : tm :=
     (fun  t1 mt1 i => tproj mt1 i)
     (fun r mr => trcd mr)
     (nil)
-    (fun i t r mt mr => cons i mt mr)
+    (fun i t r mt mr => (i, mt) :: mr)
     t.
 
 Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
@@ -398,7 +416,7 @@ with value_rcd : (alist tm) -> Prop :=
   | vr_cons : forall x v1 vr,
       value v1 ->
       value_rcd vr ->
-      value_rcd (cons x v1 vr).
+      value_rcd ((x, v1) :: vr).
 
 Hint Constructors value value_rcd.
 
@@ -466,11 +484,11 @@ Inductive step : tm -> tm -> Prop :=
 with step_rcd : (alist tm) -> (alist tm) -> Prop := 
   | STR_Head : forall x t t' rb,
         t ==> t' ->
-        (cons x t rb) *==> (cons x t' rb)
+        ((x, t) :: rb) *==> ((x, t') :: rb)
   | STR_Tail : forall x v rb rb',
         value v ->
         rb *==> rb' ->
-        (cons x v rb) *==> (cons x v rb')
+        ((x, v) :: rb) *==> ((x, v) :: rb')
 
 where "t1 '==>' t2" := (step t1 t2)
 and "rb1 '*==>' rb2" := (step_rcd rb1 rb2).
@@ -546,7 +564,7 @@ with rcd_has_type : context -> (alist tm) -> (alist ty) -> Prop :=
   | TR_Cons : forall Gamma x t T tr Tr,
       Gamma |- t \in T ->
       Gamma |- tr *\in Tr ->
-      Gamma |- (cons x t tr) *\in (cons x T Tr)
+      Gamma |- ((x, t) :: tr) *\in ((x, T) :: Tr)
 
 where "Gamma '|-' t '\in' T" := (has_type Gamma t T)
 and   "Gamma '|-' r '*\in' Tr" := (rcd_has_type Gamma r Tr).
@@ -614,14 +632,10 @@ Tactic Notation "has_type_both_cases" tactic(first) ident(c) :=
 
 Lemma typing_example_2 : 
   empty |- 
-    (tapp (tabs a (TRcd (cons i1 (TArrow A A)
-                            (cons i2 (TArrow B B)
-                            nil)))
+    (tapp (tabs a (TRcd [(i1, (TArrow A A)); (i2, (TArrow B B))])
               (tproj (tvar a) i2))
-            (trcd (cons i1 (tabs a A (tvar a)) 
-              (cons i2 (tabs a B (tvar a))
-              nil))) ) \in
-    (TArrow B B).
+            (trcd [(i1, (tabs a A (tvar a))); (i2, (tabs a B (tvar a)))]) )
+    \in (TArrow B B).
 Proof. eauto 15 using extend_eq. Qed.
 (**
   eapply T_App.
@@ -640,8 +654,8 @@ Proof. eauto 15 using extend_eq. Qed.
 
 Example typing_nonexample : 
   ~ exists T,
-      (extend empty a (TRcd (cons i2 (TArrow A A) nil)))  |-
-               (trcd (cons i1 (tabs a B (tvar a)) nil)) \in
+      (extend empty a (TRcd (cons (i2, (TArrow A A)) nil)))  |-
+               (trcd (cons (i1, (tabs a B (tvar a))) nil)) \in
                T.
   (* no T | a : { i2 : A->A } |- { i1 = λ a:B . a } : T *)
 Proof.
@@ -650,9 +664,9 @@ Proof.
 Example typing_nonexample_2 : forall y,
   ~ exists T,
     (extend empty y A) |-
-           (tapp (tabs a (TRcd (cons i1 A nil))
+           (tapp (tabs a (TRcd (cons (i1, A) nil))
                      (tproj (tvar a) i1))
-                   (trcd (cons i1 (tvar y) (cons i2 (tvar y) nil))) ) \in
+                   (trcd (cons (i1, (tvar y)) (cons (i2, (tvar y)) nil))) ) \in
            T.
   (* forall y, ~ exists T, y : A |- (λ a : { i1 : A} . a.i1) { i1 = y; i2 = y } : T *)
 Proof.
@@ -853,8 +867,8 @@ Proof with eauto.
 
   Case "TR_Cons".
     (* If the last rule was [T_Rcd] established by [TR_Cons], then 
-          [tr = cons x t tr],
-          [Tr = cons x T Tr],
+          [tr = cons (x, t) tr],
+          [Tr = cons (x, T) Tr],
           [ empty |- t : Tx] and
           [empty |- tr *: Tr].
         By the P IH, either t is a value or it steps and
@@ -893,10 +907,10 @@ Inductive appears_free_in : id -> tm -> Prop :=
 with appears_free_in_rcd : id -> (alist tm) -> Prop :=
   | afi_rhead : forall x i ti r',
       appears_free_in x ti ->
-      appears_free_in_rcd x (cons i ti r')
+      appears_free_in_rcd x ((i, ti) :: r')
   | afi_rtail : forall x i ti r',
       appears_free_in_rcd x r' ->
-      appears_free_in_rcd x (cons i ti r').
+      appears_free_in_rcd x ((i, ti) :: r').
 
 Hint Constructors appears_free_in appears_free_in_rcd.
 
