@@ -1,7 +1,7 @@
-(** * Records: Adding Records to STLC *)
+(** * RecordsExt: Adding Records to STLC *)
 
-(** This file started out as SF's Records.v but has been modified to have records as 
-      association lists. *)
+(** This file started out as SF's Records.v but has been modified to 
+    have records as association lists. *)
 
 Add LoadPath "/Users/pv/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
@@ -219,6 +219,7 @@ Tactic Notation "t_both_cases" tactic(first) ident(c) :=
 
 
 (* ###################################################################### *)
+(** ** Reduction *)
 (** *** Substitution *)
 
 (**  Coq complains when subst is defined with [Fixpoint ... with] 
@@ -422,7 +423,7 @@ Fixpoint tlookup (x:id) (tr:tm) : option tm :=
     [has_type]. *)
 *)
 
-(** ** Reduction:
+(** *** Reduction rules:
 <<
                                  ti ==> ti'                            (ST_Rcd)
     --------------------------------------------------------------------  

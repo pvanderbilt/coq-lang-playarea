@@ -1,4 +1,4 @@
-MODULES := LDef LProps LEval Tests Tests2 LEProps LEProps3 Utils
+MODULES := LDef LProps LEval Tests Tests2 LEProps LEProps3 Utils RecordsExt
 VS      := $(MODULES:%=%.v)
 PSF			:= ../../Coq/pierce_software_foundations_3.2
 
@@ -8,7 +8,7 @@ coq: Makefile.coq
 	$(MAKE) -f Makefile.coq
 
 Makefile.coq: Makefile
-	coq_makefile -I $(PSF) -I . $(VS) -o Makefile.coq
+	coq_makefile -I . -I $(PSF) $(VS) -o Makefile.coq
 
 clean:: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
