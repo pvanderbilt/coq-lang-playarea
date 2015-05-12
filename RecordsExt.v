@@ -16,71 +16,6 @@ Module Records.
 
 (* ###################################################################### *)
 
-(** *** Preliminary definitions (alists): *)
-(*
-Definition alist (T : Type) : Type := list (id * T).
-
-Fixpoint lookup {X: Type} (x: id) (a: alist X) : option X :=
-  match a with
-    | nil => None
-    | cons (y, v) a' => if eq_id_dec x y then (Some v) else (lookup x a')
-    end.
-
-Lemma lookup_cons_eq : 
-  forall T x (v : T) (a : alist T),
-    lookup x (cons (x, v) a) = Some v.
-Proof.
-  intros. simpl. apply eq_id.
-Qed.
-
-Lemma lookup_cons_neq :
-  forall T x y (v : T) (a : alist T),
-    x <> y ->
-    lookup x (cons (y, v) a) = lookup x a.
-Proof.
-  intros. simpl. apply neq_id. apply H.
-Qed.
-*)
-(*
-Inductive alist (T : Type) : Type :=
-  | nil : alist T
-  | cons : id -> T -> alist T  -> alist T.
-
-Arguments nil {T}.
-Arguments cons {T} _ _ _.
-
-Tactic Notation "A_cases" tactic(first) ident(c) :=
-  first;
-  [ Case_aux c "nil" | Case_aux c "cons" ].
-
-Fixpoint lookup {X: Type} (x: id) (a: alist X) : option X :=
-  match a with
-    | nil => None
-    | cons y t a' => if eq_id_dec x y then (Some t) else (lookup x a')
-    end.
-
-Fixpoint map {X Y: Type} (f: X -> Y) (a: alist X) : alist Y :=
-  match a with
-  | nil => nil
-  | cons x t r => cons x (f t) (map f r)
-  end.
-
-Lemma lookup_cons_eq : 
-  forall T x (v : T) (a : alist T),
-    lookup x (cons x v a) = Some v.
-Proof.
-  intros. simpl. apply eq_id.
-Qed.
-
-Lemma lookup_cons_neq :
-  forall T x y (v : T) (a : alist T),
-    x <> y ->
-    lookup x (cons y v a) = lookup x a.
-Proof.
-  intros. simpl. apply neq_id. apply H.
-Qed.
-*)
-
 (**  ** Syntax:
 <<
        t ::=                          Terms:
@@ -416,30 +351,10 @@ with value_rcd : (alist tm) -> Prop :=
   | vr_cons : forall x v1 vr,
       value v1 ->
       value_rcd vr ->
-      value_rcd ((x, v1) :: vr).
+      value_rcd (aextend x v1 vr).
 
 Hint Constructors value value_rcd.
 
-(** Utility functions for extracting one field from record type or
-    term: *)
-(*
-Fixpoint Tlookup (x:id) (Tr:ty) : option ty :=
-  match Tr with
-  | TRcd RT => lookup x RT
-  | _ => None
-  end.
-
-Fixpoint tlookup (x:id) (tr:tm) : option tm :=
-  match tr with
-  | trcd r => lookup x r
-  | _ => None
-  end.
-
-
-(** The [step] function uses the term-level lookup function (for the
-    projection rule), while the type-level lookup is needed for
-    [has_type]. *)
-*)
 
 (** *** Reduction rules:
 <<
@@ -475,7 +390,7 @@ Inductive step : tm -> tm -> Prop :=
         (tproj t1 i) ==> (tproj t1' i)
   | ST_ProjRcd : forall r x vx,
         value_rcd r ->
-        lookup x r = Some vx ->
+        alookup x r = Some vx ->
         (tproj (trcd r) x) ==> vx
   | ST_Rcd : forall rb rb',
         rb *==> rb' ->
@@ -484,11 +399,11 @@ Inductive step : tm -> tm -> Prop :=
 with step_rcd : (alist tm) -> (alist tm) -> Prop := 
   | STR_Head : forall x t t' rb,
         t ==> t' ->
-        ((x, t) :: rb) *==> ((x, t') :: rb)
+        (aextend x t rb) *==> (aextend x t' rb)
   | STR_Tail : forall x v rb rb',
         value v ->
         rb *==> rb' ->
-        ((x, v) :: rb) *==> ((x, v) :: rb')
+        (aextend x v rb) *==> (aextend x v rb')
 
 where "t1 '==>' t2" := (step t1 t2)
 and "rb1 '*==>' rb2" := (step_rcd rb1 rb2).
@@ -552,7 +467,7 @@ Inductive has_type : context -> tm -> ty -> Prop :=
   (* records: *)
   | T_Proj : forall Gamma x t Tx Tr,
       Gamma |- t \in (TRcd Tr) ->
-      lookup x Tr = Some Tx ->
+      alookup x Tr = Some Tx ->
       Gamma |- (tproj t x) \in Tx
   | T_Rcd : forall Gamma tr Tr,
       Gamma |- tr *\in Tr ->
@@ -564,7 +479,7 @@ with rcd_has_type : context -> (alist tm) -> (alist ty) -> Prop :=
   | TR_Cons : forall Gamma x t T tr Tr,
       Gamma |- t \in T ->
       Gamma |- tr *\in Tr ->
-      Gamma |- ((x, t) :: tr) *\in ((x, T) :: Tr)
+      Gamma |- (aextend x t tr) *\in (aextend x T Tr)
 
 where "Gamma '|-' t '\in' T" := (has_type Gamma t T)
 and   "Gamma '|-' r '*\in' Tr" := (rcd_has_type Gamma r Tr).
@@ -636,8 +551,8 @@ Lemma typing_example_2 :
               (tproj (tvar a) i2))
             (trcd [(i1, (tabs a A (tvar a))); (i2, (tabs a B (tvar a)))]) )
     \in (TArrow B B).
-Proof. eauto 15 using extend_eq. Qed.
-(**
+Proof. eauto 20 using extend_eq, eq_id. 
+       (* FIX EAUTO USAGE ABOVE *)
   eapply T_App.
     eapply T_Abs. eapply T_Proj.
       apply T_Var. unfold extend. apply eq_id.
@@ -647,7 +562,7 @@ Proof. eauto 15 using extend_eq. Qed.
       apply TR_Cons.
         apply T_Abs. apply T_Var. apply extend_eq.
         apply TR_Nil.
-*)
+Qed.
 
 (** Before starting to prove this fact (or the one above!), make sure
     you understand what it is saying. *)
@@ -708,12 +623,12 @@ Proof.
 
 
 
-Lemma rcd_field_lookup : 
+Lemma rcd_field_alookup : 
   forall Gamma rb Trb x Tx,
     value_rcd rb ->
     Gamma |- rb *\in Trb ->
-    lookup x Trb = Some Tx ->
-    exists vx, lookup x rb = Some vx /\ Gamma |- vx \in Tx.
+    alookup x Trb = Some Tx ->
+    exists vx, alookup x rb = Some vx /\ Gamma |- vx \in Tx.
 Proof.
   intros rb Gamma Tr x Tx Hv Ht Hl.
   induction Ht as [| G y vy Ty rb' Trb' Hty Ht]. 
@@ -721,17 +636,17 @@ Proof.
   Case "nil". inversion Hl.
   Case "cons".
     inverts Hv. 
-    destruct (eq_id_dec x y).
+    destruct (eq_id_dec y x).
       SCase "x=y". subst. 
-        rewrite (lookup_cons_eq _ y Ty Trb' ) in Hl. inverts Hl.
+        rewrite (alookup_aextend_eq _ _ Ty Trb' ) in Hl. inverts Hl.
         exists vy. split.
-          apply lookup_cons_eq.
+          apply alookup_cons_eq.
           apply Hty.
-      SCase "x<>y".
-        rewrite (lookup_cons_neq _ x y Ty _ n) in Hl. 
+      SCase "y<>x".
+        rewrite (alookup_aextend_neq _ _ _ Ty _ n) in Hl. 
         destruct (IHHt H3 Hl) as [vx [Hlx HTx]]; clear IHHt.
         exists vx. split.
-          rewrite (lookup_cons_neq _ x y _ _ n). apply Hlx.
+          rewrite (alookup_aextend_neq _ _ _ _ _ n). apply Hlx.
           apply HTx.
 Qed.
 
@@ -749,7 +664,7 @@ Definition has_type_ind_both' (P : context -> tm -> ty -> Prop)
         Gamma |- t2 \in T1 -> P Gamma t2 T1 -> P Gamma (tapp t1 t2) T2)
       (fproj : forall (Gamma : context) (x : id) (t : tm) (Tx : ty) (Tr : alist ty),
         Gamma |- t \in TRcd Tr ->
-        P Gamma t (TRcd Tr) -> lookup x Tr = Some Tx -> P Gamma (tproj t x) Tx)
+        P Gamma t (TRcd Tr) -> alookup x Tr = Some Tx -> P Gamma (tproj t x) Tx)
       (frcd' : forall (Gamma : context) (tr : alist tm) (Tr : alist ty),
         rcd_has_type Gamma tr Tr ->
           (forall (Q : context -> alist tm -> alist ty -> Prop), 
@@ -841,11 +756,11 @@ Proof with eauto.
     SCase "rcd is value".
       (* Starting here, this differs from SF. *)
       (* If [t] is a value, then we may use lemma
-         [rcd_field_lookup] to show [lookup x tr = Some vx] for
+         [rcd_field_alookup] to show [alookup x tr = Some vx] for
          some [vx] which gives us [tproj i t ==> ti] by [ST_ProjRcd].  *)
       inversion Ht; subst; clear Ht; try solve by inversion...
       inversion H0; subst; clear H0.
-      destruct (rcd_field_lookup _ _ _ _ Tx H2 H4 H) as [vx [Hlxr Htx]].
+      destruct (rcd_field_alookup _ _ _ _ Tx H2 H4 H) as [vx [Hlxr Htx]].
       exists vx. apply (ST_ProjRcd _ _ _ H2 Hlxr).
     SCase "rcd_steps".
       (* On the other hand, if [t ==> t'], then [tproj t i ==> tproj t' i]
@@ -907,10 +822,10 @@ Inductive appears_free_in : id -> tm -> Prop :=
 with appears_free_in_rcd : id -> (alist tm) -> Prop :=
   | afi_rhead : forall x i ti r',
       appears_free_in x ti ->
-      appears_free_in_rcd x ((i, ti) :: r')
+      appears_free_in_rcd x (aextend i ti r')
   | afi_rtail : forall x i ti r',
       appears_free_in_rcd x r' ->
-      appears_free_in_rcd x ((i, ti) :: r').
+      appears_free_in_rcd x (aextend i ti r').
 
 Hint Constructors appears_free_in appears_free_in_rcd.
 
@@ -965,7 +880,7 @@ Lemma substitution_preserves_typing : forall Gamma x U v t S,
      (extend Gamma x U) |- t \in S  ->
      empty |- v \in U   ->
      Gamma |- ([x:=v]t) \in S.
-Proof with eauto.
+Proof with eauto 15.
   (* Theorem: If Gamma,x:U |- t : S and empty |- v : U, then 
      Gamma |- ([x:=v]t) S. *)
   intros Gamma x U v t S Htypt Htypv. 
@@ -1049,7 +964,10 @@ Proof with eauto.
       subst. rewrite neq_id...
 
   Case "trcd". 
-    rewrite <- (subst_rcd_eqv x v rb)...
+    rewrite <- (subst_rcd_eqv x v rb)... 
+
+  Case "trcons".
+    apply TR_Cons...
 Qed.
 
 
@@ -1100,13 +1018,14 @@ Proof with eauto.
      consider [T_ProjRcd].
 
      Here we have that [t] is a record value.  Since rule T_Proj was
-     used, we know [empty |- t \in Tr] and [Tlookup i Tr = Some
+     used, we know [empty |- t \in Tr] and [Talookup i Tr = Some
      Ti] for some [i] and [Tr].  We may therefore apply lemma
-     [lookup_field_in_value] to find the record element this
+     [alookup_field_in_value] to find the record element this
      projection steps to. *)
     inverts HT.
-    destruct (rcd_field_lookup _ _ _ _ _ H2 H5 H) as [vx [ Hlxr Htx]].
+    destruct (rcd_field_alookup _ _ _ _ _ H2 H5 H) as [vx [ Hlxr Htx]].
     rewrite H4 in Hlxr. inversion Hlxr...
+
 Qed.
 (** [] *)
 

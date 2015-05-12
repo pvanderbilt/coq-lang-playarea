@@ -8,9 +8,8 @@ Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export LDef LEval.
-Import LDEF.
-Import LEVAL.
+Require Export Common LDef LEval.
+Import P3Common LDEF LEVAL.
 
 Module LEProps.
 
@@ -42,7 +41,7 @@ Fixpoint value_has_type (v : evalue) (T : ty) {struct T} : Prop :=
     match er with
       | efr_normal vr => vr ::: T
       | efr_nogas     => True
-      | efr_stuck      => False
+      | efr_stuck     => False
     end
   in let evaluates_to_a (t : tm) (g : rctx) (T : ty) : Prop := 
     forall n, result_ok (evalF t g n) T
@@ -50,7 +49,7 @@ Fixpoint value_has_type (v : evalue) (T : ty) {struct T} : Prop :=
     | (TBool, vtrue) => True
     | (TBool, vfalse) => True
     | ((TArrow T1 T2), (vabs xf tb gf)) => 
-        forall va, va ::: T1 -> evaluates_to_a tb (acons xf va gf) T2
+        forall va, va ::: T1 -> evaluates_to_a tb (aextend xf va gf) T2
     | (_, _) => False
   end
 where "v ':::' T" := (value_has_type v T).
@@ -68,8 +67,9 @@ Notation "t '/' g '=>:' T" := (evaluates_to_a t g T)
     (at level 40, g at level 39).
 
 Inductive rtcontext_has_type: rctx -> context -> Prop :=
-  | TC_nil : anil :::* empty
-  | TC_cons : forall G g x v T, g :::* G -> v ::: T -> acons x v g :::* extend G x T
+  | TC_nil : nil :::* empty
+  | TC_cons : forall G g x v T, 
+                g :::* G -> v ::: T -> (aextend x v g) :::* extend G x T
 where "g ':::*' G" := (rtcontext_has_type g G).
 
 Hint Unfold value_has_type result_ok evaluates_to_a. 
@@ -91,14 +91,14 @@ Lemma fun_vals:
   forall T1 T2 v, v ::: TArrow T1 T2 ->
     exists xf tb gf, 
       v = (vabs xf tb gf) 
-      /\ (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2).
+      /\ (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2).
 Proof. 
   intros T1 T2 v Hvt.  destruct v; simpl in Hvt.
     exists i t a. split. 
       reflexivity.
       intros va Hvat n. 
         specialize (Hvt va Hvat n). 
-        destruct (evalF t (acons i va a) n); unfold result_ok; auto.
+        destruct (evalF t (aextend i va a) n); unfold result_ok; auto.
     contradiction.
     contradiction.
 Qed.
@@ -116,7 +116,7 @@ Proof.
   introv Hctxts HGxT. induction Hctxts.
     Case "TC_nil". inversion HGxT.
     Case "TC_cons". unfold extend in HGxT. destruct (eq_id_dec x0 x).
-      SCase "x=x0". inversion HGxT; subst; clear HGxT. exists v. split.
+      SCase "x0=x". subst. inverts HGxT. exists v. split.
         simpl. apply eq_id.
         assumption.
       SCase "x0<>x". apply IHHctxts in HGxT. clear IHHctxts.
@@ -213,7 +213,7 @@ Proof.
   Case "tabs". 
     inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
     rewrite <- Hev. clear Hev. intros va Hvat n. 
-    apply (IHtb _ _ (acons x va g) H4 (TC_cons _ _ _ va _ HGg Hvat)).
+    apply (IHtb _ _ (aextend x va g) H4 (TC_cons _ _ _ va _ HGg Hvat)).
 
   Case "ttrue".
     inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.

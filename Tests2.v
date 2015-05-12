@@ -8,14 +8,13 @@ Add LoadPath  "~/Polya/coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export LEval.
-Import LDEF.
-Import LEVAL.
+Require Export Common LEval.
+Import P3Common LDEF LEVAL.
 
 (* ###################################################################### *)
 (** ** Some definitions to use in testing *)
 
-Definition rctx0 : rctx := anil.
+Definition rctx0 : rctx := nil.
 
 Definition id_x := Id(0).
 Definition id_y := Id(1).
@@ -34,7 +33,8 @@ Hint Extern 1 (eval (?F) _ _) => unfold F.
 
 (** *** Term constructors: [let1] and [lets] *)
 
-Definition let1 (b: id * ty * tm)  (ti : tm) := match b with (x, Tx, tx)  => tapp (tabs x Tx ti) tx end.
+Definition let1 (b: id * ty * tm)  (ti : tm) := 
+  match b with (x, Tx, tx)  => tapp (tabs x Tx ti) tx end.
 
 Fixpoint lets (bs: list (id * ty * tm))  (ti : tm) := 
   match bs with 

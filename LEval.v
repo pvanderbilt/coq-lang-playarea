@@ -7,41 +7,13 @@ Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export LDef.
-Import LDEF.
+Require Export Common LDef.
+Import P3Common LDEF.
 
 Module LEVAL.
 
 (* ###################################################################### *)
-(** ** Values *)
-
-(**  *** association lists (alist) *)
-
-Inductive alist (T : Type) : Type :=
-  | anil    : alist T
-  | acons : id -> T -> alist T  -> alist T.
-
-Arguments anil {T}.
-Arguments acons {T} _ _ _.
-
-Tactic Notation "alist_cases" tactic(first) ident(c) :=
-  first;
-  [ Case_aux c "anil" | Case_aux c "acons" ].
-
-Fixpoint alookup {T: Type} (x: id) (a : alist T) : option T :=
-  match a with
-    | anil => None
-    | acons y t r => if eq_id_dec y x then (Some t) else (alookup x r)
-  end.
-
-Fixpoint amap {T V: Type} (f: T -> V) (a: alist T) : alist V :=
-  match a with
-    | anil => anil
-    | acons x t r => acons x (f t) (amap f r)
-  end.
-
-
-(**  *** values (evalue) *)
+(** ** Values (type [evalue]) *)
 
 Inductive evalue : Type :=
   | vabs : id -> tm -> (alist evalue) -> evalue
@@ -49,7 +21,7 @@ Inductive evalue : Type :=
   | vfalse : evalue.
 
 (* ###################################################################### *)
-(**  ** The eval relation for big-step semantics *)
+(**  ** The [eval] relation for big-step semantics *)
 
 Definition rctx := alist evalue.
 
@@ -77,7 +49,7 @@ Inductive eval : tm -> rctx -> evalue -> Prop :=
 
 with apply : evalue -> evalue -> evalue -> Prop :=
   | EA : forall xf tf cf va vr,
-      tf / acons xf va cf || vr -> apply (vabs xf tf cf) va vr
+      tf / (aextend xf va cf) || vr -> apply (vabs xf tf cf) va vr
 
 with eval_bool : evalue -> tm -> tm -> rctx -> evalue -> Prop :=
   | EB_true : forall tt te c v, tt / c || v -> eval_bool vtrue tt te c v
@@ -129,7 +101,7 @@ Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
             LETRT v1 <== evalF t1 g gas' IN
               LETRT v2 <== evalF t2 g gas' IN
                 match v1 with 
-                  | vabs tx tf te => evalF tf (acons tx v2 te) gas'
+                  | vabs tx tf te => evalF tf (aextend tx v2 te) gas'
                   | _ => efr_stuck
                 end
         | tabs x T t => efr_normal (vabs x t g)
@@ -163,7 +135,7 @@ with evalF' (t : tm) (e : rctx) (gas' : nat) {struct gas'} : ef_return :=
         LETRT v1 <== evalF t1 g gas' IN
           LETRT v2 <== evalF t2 g gas' IN
             match v1 with 
-              | vabs tx tf te => evalF tf (acons tx v2 te) gas'
+              | vabs tx tf te => evalF tf (aextend tx v2 te) gas'
               | _ => efr_stuck
             end
     | tabs x T t => efr_normal (vabs x t e)

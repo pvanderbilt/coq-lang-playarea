@@ -10,9 +10,8 @@ Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export LDef LEval.
-Import LDEF.
-Import LEVAL.
+Require Export Common LDef LEval.
+Import P3Common LDEF LEVAL.
 
 Module LEProps3.
 
@@ -70,15 +69,18 @@ Inductive value_has_type : evalue -> ty -> Prop :=
   | TV_False : vfalse ::: TBool
 
 with rtcontext_has_type: rctx -> context -> Prop :=
-  | TC_nil : anil :::* empty
-  | TC_cons : forall G g x v T, g :::* G -> v ::: T -> acons x v g :::* extend G x T
+  | TC_nil : nil :::* empty
+  | TC_cons : forall G g x v T, 
+                g :::* G -> v ::: T -> (aextend x v g) :::* extend G x T
 
 with evaluates_to_a : tm -> rctx ->  ty -> Prop := 
-   | TVE : forall t g T,  (forall n, result_ok (evalF t g n) T) -> (t / g =>: T)
+   | TVE : forall t g T,  
+             (forall n, result_ok (evalF t g n) T) -> (t / g =>: T)
 
 with result_ok : ef_return -> ty -> Prop :=
   | TR_NG : forall (T : ty), result_ok efr_nogas T
-  | TR_Norm : forall (vr : evalue) (T : ty),  vr ::: T ->  result_ok (efr_normal vr) T
+  | TR_Norm : forall (vr : evalue) (T : ty),  
+                vr ::: T ->  result_ok (efr_normal vr) T
 
 where "v ':::' T" := (value_has_type v T)
  and "g ':::*' G" := (rtcontext_has_type g G)
@@ -90,12 +92,13 @@ Hint Constructors value_has_type rtcontext_has_type evaluates_to_a result_ok.
 
 Lemma fake_vht_arrow_inversion:
   forall T1 T2 v, v ::: TArrow T1 T2 ->
-    exists xf tb gf, v = (vabs xf tb gf) /\ (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2).
+    exists xf tb gf, v = (vabs xf tb gf) /\ 
+                  (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2).
 Proof. admit. Qed.
 
 Lemma fake_TV_Abs:  
       forall (xf : id) (tb : tm) (gf : alist evalue) (T1 T2 : ty), 
-          (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2) ->
+          (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2) ->
           vabs xf tb gf ::: TArrow T1 T2.
 Proof. admit. Qed.
 
@@ -203,7 +206,7 @@ Proof.
     apply (let_val t2 g n' _ _ _ _ HevL2 Ht2). clear HevL2 Ht2.
     intros v2 er2 Hv2 Hv2t erf Hevf.
     (* Here:   [Hv1t : v1 ::: TArrow T11 T] & [Hv2t : v2 ::: T11] & [erf = match v1 with ... end]. *)
-    (* Invert Hv1t to get at the structure of v1 which gives [erf = evalF tb (acons xf v2 gf) n'].  
+    (* Invert Hv1t to get at the structure of v1 which gives [erf = evalF tb (aextend xf v2 gf) n'].  
         However, with the TV_Abs definition above, there is no information about tb, so we can't proceed.
         Instead, use the fake inversion lemma to see that it goes through. *)
     assert (Hex := (fake_vht_arrow_inversion _ _ _ Hv1t)); clear Hv1t;  (* BOGUS *)
