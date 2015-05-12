@@ -16,7 +16,7 @@ Module Records.
 
 (* ###################################################################### *)
 
-(**  ** Syntax:
+(**  ** Syntax
 <<
        t ::=                          Terms:
            | ...
@@ -33,7 +33,7 @@ Module Records.
 >> 
 *)
 
-(**  *** Redefinition of types, [ty].
+(**  *** Redefinition of types, [ty]
       The last clause was added: *)
 
 Inductive ty : Type :=
@@ -49,7 +49,7 @@ Tactic Notation "T_cases" tactic(first) ident(c) :=
     induction principle we want.
     Here we do it this way and fix the induction principle. *)
 
-(**  *** Redefinition of terms, [tm].
+(**  *** Redefinition of terms, [tm]
         The last two clauses were added: *)
 
 Inductive tm : Type :=
@@ -64,27 +64,6 @@ Tactic Notation "t_cases" tactic(first) ident(c) :=
   [ Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
   | Case_aux c "tproj" | Case_aux c "trcd"  ].
 
-(** Some variables, for examples... *)
-
-Notation a := (Id 0).
-Notation f := (Id 1).
-Notation g := (Id 2).
-Notation l := (Id 3).
-Notation A := (TBase (Id 4)).
-Notation B := (TBase (Id 5)).
-Notation k := (Id 6).
-Notation i1 := (Id 7).
-Notation i2 := (Id 8).
-
-(** [{ i1:A }] *)
-
-Example er1 : exists (t:ty), t = TRcd [(i1, A)].
-Proof. eauto. Qed.
-
-(** [{ i1:A->B, i2:A }] *)
-Example er2 : exists (t:ty), t = 
-  TRcd [(i1, (TArrow A B)); (i2, A)].
-Proof. eauto. Qed.
 
 
 (* ###################################################################### *)
@@ -111,7 +90,8 @@ Proof. eauto. Qed.
       - a proof that [P T] and [Q Trb] implies [Q (cons x T Trb))]
 
     The definition may be a little hard to follow, as it is using the 
-    coq-generated [ty_rect] and [alist_rect].
+    coq-generated [ty_rect] and [alist_rect].  
+    The primed version should be the same thing using match expressions.
 *)
 
 Definition ty_nested_rect
@@ -150,6 +130,55 @@ Definition ty_nested_rect'
        | TArrow T1 T2 => fTArrow T1 (F T1) T2 (F T2)
        | TRcd Trb => fTRcd' Trb (G Trb)
      end.
+
+(* An attempt to do it as a Lemma, but the lack of a good IH kills it.
+
+Lemma ty_nested_rect'' :
+  forall 
+    (P: ty -> Type) 
+    (Q: alist ty -> Type),
+    (forall x : id, P (TBase x)) ->
+    (forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2)) ->
+    (forall Trb : alist ty, Q Trb -> P (TRcd Trb)) ->
+      (Q nil) ->
+      (forall (x : id) (T : ty) (Trb : alist ty), 
+           P T -> Q Trb -> Q ((x, T) :: Trb)) ->
+  forall T : ty, P T.
+Proof.
+  intros P Q Hbase Harrow Hrcd Hnil Hcons T.
+  T_cases (induction T) Case; auto.
+    Case "TRcd". (* no IH *) apply Hrcd. induction a; auto.
+      SCase "cons". destruct a as [x T]. apply Hcons. (* Can't prove P T *)
+Abort All.
+*)
+
+(** It would be nice if one did not have to specify Q at the start, 
+    but rather when it comes up in the TRcd case. *)
+(*
+Definition ty_nested_rect_plus
+  (P: ty -> Type) 
+    (fTBase : forall x : id, P (TBase x))
+    (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
+    (fTRcd : forall Trb : alist ty, 
+      (exists (Q: alist ty -> Type),
+              (Q nil) *
+              (forall (x : id) (T : ty) (Trb : alist ty), 
+                       P T -> Q Trb -> Q ((x, T) :: Trb)) *
+              (forall Trb : alist ty, (Q Trb) -> P (TRcd Trb)) ???
+      ) -> P (TRcd Trb))   
+  : forall T : ty, P T := admit.
+  := fix F (T : ty) : P T :=
+     let fix G (Trb : alist ty) : Q Trb :=
+         match Trb with
+           | nil => fTRcd_nil'
+           | (x,T) :: Trb' => fTRcd_cons' x T Trb' (F T) (G Trb')
+         end
+     in match T with
+       | TBase x => fTBase x
+       | TArrow T1 T2 => fTArrow T1 (F T1) T2 (F T2)
+       | TRcd Trb => fTRcd' Trb (G Trb)
+     end.
+*)
 
 
 (** *** Recursion on terms, [tm_nested_rect]
@@ -275,17 +304,6 @@ Definition tm_rect_nest (P: tm -> Type) (Q: alist tm -> Type)
  *)
 
 
-Definition substf_ok (sfunc:  id -> tm -> tm -> tm) :=
-  sfunc a (tvar f) (tvar a) = tvar f
-    /\ sfunc a (tvar f) (tvar g) = tvar g
-    /\ sfunc g (tvar f) (tvar a) = tvar a
-    /\ sfunc a (tvar g) (tproj (tvar a) a) = tproj (tvar g) a
-    /\ sfunc a (tvar g) (tapp (tvar f) (tvar a)) = tapp (tvar f) (tvar g)
-    /\ sfunc a  (tapp (tvar f) (tvar a)) (tproj (tvar a) a)
-        =  tproj  (tapp (tvar f) (tvar a)) a.
-
-Example subst_ok :substf_ok subst.
-Proof. unfold substf_ok. repeat split. Qed.
 
 (* Some other stuff: *)
 
@@ -312,9 +330,10 @@ Definition subst'' (x:id) (s:tm) :tm -> tm :=
     (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1))
     (fun  t1 mt1 i => tproj mt1 i).
 
+(*
 Example subst''_ok :substf_ok subst''.
 Proof. unfold substf_ok. repeat split. Qed.
-
+*)
 
 Definition tm_id (t : tm) : tm := 
   tm_nest_rect (fun _ => tm) (fun _ => alist tm)
@@ -326,14 +345,13 @@ Definition tm_id (t : tm) : tm :=
     (nil)
     (fun i t r mt mr => (i, mt) :: mr)
     t.
-
+(*
 Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
     =  (tapp (tvar f) (tvar a)).
 Proof. reflexivity. Qed.
-
+*)
 
 (* ###################################################################### *)
-
 
 
 (** *** Values *)
@@ -344,10 +362,13 @@ Proof. reflexivity. Qed.
 Inductive value : tm -> Prop :=
   | v_abs : forall x T11 t12,
       value (tabs x T11 t12)
-  | v_rcd : forall r, value_rcd r -> value (trcd r)
+  | v_rcd : forall r, 
+      value_rcd r -> 
+      value (trcd r)
 
 with value_rcd : (alist tm) -> Prop :=
-  | vr_nil : value_rcd nil
+  | vr_nil : 
+      value_rcd nil
   | vr_cons : forall x v1 vr,
       value v1 ->
       value_rcd vr ->
@@ -356,7 +377,7 @@ with value_rcd : (alist tm) -> Prop :=
 Hint Constructors value value_rcd.
 
 
-(** *** Reduction rules:
+(** *** Reduction rules
 <<
                                  ti ==> ti'                            (ST_Rcd)
     --------------------------------------------------------------------  
@@ -424,19 +445,9 @@ Hint Constructors step step_rcd.
  
 
 (* ###################################################################### *)
-(** ** Typing:
+(** ** Typing
 <<
-                                 ti ==> ti'                            (ST_Rcd)
-    --------------------------------------------------------------------  
-    {i1=v1, ..., im=vm, in=tn, ...} ==> {i1=v1, ..., im=vm, in=tn', ...}
 
-                                 t1 ==> t1'
-                               --------------                        (ST_Proj1)
-                               t1.i ==> t1'.i
-
-                          -------------------------                (ST_ProjRcd)
-                          {..., i=vi, ...}.i ==> vi
-   Typing:
                Gamma |- t1 : T1     ...     Gamma |- tn : Tn
              --------------------------------------------------         (T_Rcd)
              Gamma |- {i1=t1, ..., in=tn} : {i1:T1, ..., in:Tn}
@@ -484,33 +495,6 @@ with rcd_has_type : context -> (alist tm) -> (alist ty) -> Prop :=
 where "Gamma '|-' t '\in' T" := (has_type Gamma t T)
 and   "Gamma '|-' r '*\in' Tr" := (rcd_has_type Gamma r Tr).
 
-(* Inductive has_type : context -> tm -> ty -> Prop :=
-  | T_Var : forall Gamma x T,
-      Gamma x = Some T ->
-      well_formed_ty T ->
-      Gamma |- (tvar x) \in T
-  | T_Abs : forall Gamma x T11 T12 t12,
-      well_formed_ty T11 ->
-      (extend Gamma x T11) |- t12 \in T12 -> 
-      Gamma |- (tabs x T11 t12) \in (TArrow T11 T12)
-  | T_App : forall T1 T2 Gamma t1 t2,
-      Gamma |- t1 \in (TArrow T1 T2) -> 
-      Gamma |- t2 \in T1 -> 
-      Gamma |- (tapp t1 t2) \in T2
-  (* records: *)
-  | T_Proj : forall Gamma i t Ti Tr,
-      Gamma |- t \in Tr ->
-      Tlookup i Tr = Some Ti ->
-      Gamma |- (tproj t i) \in Ti
-  | T_RNil : forall Gamma,
-      Gamma |- trnil \in TRNil
-  | T_RCons : forall Gamma i t T tr Tr,
-      Gamma |- t \in T ->
-      Gamma |- tr \in Tr ->
-      record_ty Tr ->
-      record_tm tr ->
-      Gamma |- (trcons i t tr) \in (TRCons i T Tr)
- *)
 Hint Constructors has_type rcd_has_type.
 
 Tactic Notation "has_type_cases" tactic(first) ident(c) :=
@@ -532,60 +516,6 @@ Tactic Notation "has_type_both_cases" tactic(first) ident(c) :=
   | Case_aux c "TR_Nil" | Case_aux c "TR_Cons" ].
 
 
-
-(* ###################################################################### *)
-(** ** Examples *)
-
-(** **** Exercise: 2 stars (examples)  *)
-(** Finish the proofs. *)
-
-(** Feel free to use Coq's automation features in this proof.
-    However, if you are not confident about how the type system works,
-    you may want to carry out the proof first using the basic
-    features ([apply] instead of [eapply], in particular) and then
-    perhaps compress it using automation. *)
-
-Lemma typing_example_2 : 
-  empty |- 
-    (tapp (tabs a (TRcd [(i1, (TArrow A A)); (i2, (TArrow B B))])
-              (tproj (tvar a) i2))
-            (trcd [(i1, (tabs a A (tvar a))); (i2, (tabs a B (tvar a)))]) )
-    \in (TArrow B B).
-Proof. eauto 20 using extend_eq, eq_id. 
-       (* FIX EAUTO USAGE ABOVE *)
-  eapply T_App.
-    eapply T_Abs. eapply T_Proj.
-      apply T_Var. unfold extend. apply eq_id.
-      reflexivity. 
-    apply T_Rcd. apply TR_Cons.
-      apply T_Abs. apply T_Var. apply extend_eq.
-      apply TR_Cons.
-        apply T_Abs. apply T_Var. apply extend_eq.
-        apply TR_Nil.
-Qed.
-
-(** Before starting to prove this fact (or the one above!), make sure
-    you understand what it is saying. *)
-
-Example typing_nonexample : 
-  ~ exists T,
-      (extend empty a (TRcd (cons (i2, (TArrow A A)) nil)))  |-
-               (trcd (cons (i1, (tabs a B (tvar a))) nil)) \in
-               T.
-  (* no T | a : { i2 : A->A } |- { i1 = λ a:B . a } : T *)
-Proof.
-  (* FILL IN HERE *) Admitted.
-
-Example typing_nonexample_2 : forall y,
-  ~ exists T,
-    (extend empty y A) |-
-           (tapp (tabs a (TRcd (cons (i1, A) nil))
-                     (tproj (tvar a) i1))
-                   (trcd (cons (i1, (tvar y)) (cons (i2, (tvar y)) nil))) ) \in
-           T.
-  (* forall y, ~ exists T, y : A |- (λ a : { i1 : A} . a.i1) { i1 = y; i2 = y } : T *)
-Proof.
-  (* FILL IN HERE *) Admitted.
 
 (* ###################################################################### *)
 (** ** Properties of Typing *)
@@ -650,44 +580,6 @@ Proof.
           apply HTx.
 Qed.
 
-(* An attempt at moving Q down to where it comes up: 
-
-Definition has_type_ind_both' (P : context -> tm -> ty -> Prop)  
-      (fvar : forall (Gamma : id -> option ty) (x : id) (T : ty),
-        Gamma x = Some T -> P Gamma (tvar x) T)
-      (fabs : forall (Gamma : partial_map ty) (x : id) (T1 T2 : ty) (tb : tm),
-        extend Gamma x T1 |- tb \in T2 ->
-        P (extend Gamma x T1) tb T2 -> P Gamma (tabs x T1 tb) (TArrow T1 T2))
-      (fapp : forall (T1 T2 : ty) (Gamma : context) (t1 t2 : tm),
-        Gamma |- t1 \in TArrow T1 T2 ->
-        P Gamma t1 (TArrow T1 T2) ->
-        Gamma |- t2 \in T1 -> P Gamma t2 T1 -> P Gamma (tapp t1 t2) T2)
-      (fproj : forall (Gamma : context) (x : id) (t : tm) (Tx : ty) (Tr : alist ty),
-        Gamma |- t \in TRcd Tr ->
-        P Gamma t (TRcd Tr) -> alookup x Tr = Some Tx -> P Gamma (tproj t x) Tx)
-      (frcd' : forall (Gamma : context) (tr : alist tm) (Tr : alist ty),
-        rcd_has_type Gamma tr Tr ->
-          (forall (Q : context -> alist tm -> alist ty -> Prop), 
-            (forall (Gamma : context) (tr : alist tm) (Tr : alist ty),
-              rcd_has_type Gamma tr Tr -> Q Gamma tr Tr -> P Gamma (trcd tr) (TRcd Tr)) ->
-            (forall Gamma : context, Q Gamma nil nil) ->
-            ((forall (Gamma : context) (x : id) (t : tm) (T : ty) (tr : alist tm) (Tr : alist ty),
-              Gamma |- t \in T -> P Gamma t T ->
-              rcd_has_type Gamma tr Tr -> Q Gamma tr Tr -> Q Gamma (cons x t tr) (cons x T Tr))))
-          -> P Gamma (trcd tr) (TRcd Tr))
-    : forall (c : context) (t : tm) (t0 : ty), c |- t \in t0 -> P c t t0.
-Proof.
-  refine (has_type_ind P fvar fabs fapp fproj _).
-  intros G t T Hty. apply (frcd' G _ _ Hty).
-  intros Q frcd fnil fcons.
-
-refine (has_type_ind P fvar fabs fapp fproj _ G t T Hty).
-   
-  := 
-    match RCD with ex_intro Q (conj frcd (conj frnil frcons)) => 
-      has_type_ind_both P Q fvar fabs fapp fproj frcd frnil frcons
-    end.
-*)
 
 (* ###################################################################### *)
 (** *** Progress *)
