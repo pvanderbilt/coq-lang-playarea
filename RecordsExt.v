@@ -16,25 +16,14 @@ Module Records.
 
 (* ###################################################################### *)
 
-(**  ** Syntax
+(**  ** Syntax *)
+
+(**  *** Types [ty]
 <<
-       t ::=                          Terms:
-           | ...
-           | {i1=t1, ..., in=tn}         record 
-           | t.i                         projection
-
-       v ::=                          Values:
-           | ...
-           | {i1=v1, ..., in=vn}         record value
-
-       T ::=                          Types:
            | ...
            | {i1:T1, ..., in:Tn}         record type
 >> 
-*)
-
-(**  *** Redefinition of types, [ty]
-      The last clause was added: *)
+ *)
 
 Inductive ty : Type :=
   | TBase     : id -> ty
@@ -49,8 +38,15 @@ Tactic Notation "T_cases" tactic(first) ident(c) :=
     induction principle we want.
     Here we do it this way and fix the induction principle. *)
 
-(**  *** Redefinition of terms, [tm]
-        The last two clauses were added: *)
+(** *** Terms [tm]
+<<
+       t ::=                          Terms:
+           | ...
+           | {i1=t1, ..., in=tn}         record 
+           | t.i                         projection
+
+>> 
+The last two clauses were added. *)
 
 Inductive tm : Type :=
   | tvar : id -> tm
@@ -354,10 +350,14 @@ Proof. reflexivity. Qed.
 (* ###################################################################### *)
 
 
-(** *** Values *)
+(** *** Values 
+<<
+       v ::=                          Values:
+           | ...
+           | {i1=v1, ..., in=vn}         record value
 
-(** Next we define the values of our language.  A record is a value if
-    all of its fields are. *)
+>> 
+A record is a value if all of its fields are. *)
 
 Inductive value : tm -> Prop :=
   | v_abs : forall x T11 t12,
