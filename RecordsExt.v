@@ -522,50 +522,18 @@ Tactic Notation "has_type_both_cases" tactic(first) ident(c) :=
 
 
 (* ###################################################################### *)
-(** *** Field Lookup *)
-
-(* OLD: Delete or modify:
- Lemma: If [empty |- v : T] and [Tlookup i T] returns [Some Ti],
-     then [tlookup i v] returns [Some ti] for some term [ti] such
-     that [empty |- ti \in Ti].
-
-    Proof: By induction on the typing derivation [Htyp].  Since
-      [Tlookup i T = Some Ti], [T] must be a record type, this and
-      the fact that [v] is a value eliminate most cases by inspection,
-      leaving only the [T_RCons] case.
-
-      If the last step in the typing derivation is by [T_RCons], then
-      [t = trcons i0 t tr] and [T = TRCons i0 T Tr] for some [i0],
-      [t], [tr], [T] and [Tr].
-
-      This leaves two possiblities to consider - either [i0 = i] or
-      not.
-
-      - If [i = i0], then since [Tlookup i (TRCons i0 T Tr) = Some
-        Ti] we have [T = Ti].  It follows that [t] itself satisfies
-        the theorem.
-
-      - On the other hand, suppose [i <> i0].  Then 
-        Tlookup i T = Tlookup i Tr
-        and 
-        tlookup i t = tlookup i tr,
-        so the result follows from the induction hypothesis. [] *)
-
-
+(** *** Record Field Lookup *)
 
 Lemma rcd_field_alookup : 
-  forall Gamma rb Trb x Tx,
-    value_rcd rb ->
-    Gamma |- rb *\in Trb ->
+  forall rb Trb x Tx,
+    empty |- rb *\in Trb ->
     alookup x Trb = Some Tx ->
-    exists vx, alookup x rb = Some vx /\ Gamma |- vx \in Tx.
+    exists vx, alookup x rb = Some vx /\ empty |- vx \in Tx.
 Proof.
-  intros rb Gamma Tr x Tx Hv Ht Hl.
+  intros rb Tr x Tx Ht Hl.
   induction Ht as [| G y vy Ty rb' Trb' Hty Ht]. 
-  (* induction 2 as [| G y vy Ty rb' Trb' Hty Ht]; intro Hl. *)
   Case "nil". inversion Hl.
   Case "cons".
-    inverts Hv. 
     destruct (eq_id_dec y x).
       SCase "x=y". subst. 
         rewrite (alookup_aextend_eq _ _ Ty Trb' ) in Hl. inverts Hl.
@@ -574,12 +542,11 @@ Proof.
           apply Hty.
       SCase "y<>x".
         rewrite (alookup_aextend_neq _ _ _ Ty _ n) in Hl. 
-        destruct (IHHt H3 Hl) as [vx [Hlx HTx]]; clear IHHt.
+        destruct (IHHt Hl) as [vx [Hlx HTx]]; clear IHHt.
         exists vx. split.
           rewrite (alookup_aextend_neq _ _ _ _ _ n). apply Hlx.
           apply HTx.
 Qed.
-
 
 (* ###################################################################### *)
 (** *** Progress *)
@@ -647,13 +614,15 @@ Proof with eauto.
     right. destruct IHHt...
     SCase "rcd is value".
       (* Starting here, this differs from SF. *)
-      (* If [t] is a value, then we may use lemma
-         [rcd_field_alookup] to show [alookup x tr = Some vx] for
-         some [vx] which gives us [tproj i t ==> ti] by [ST_ProjRcd].  *)
-      inversion Ht; subst; clear Ht; try solve by inversion...
-      inversion H0; subst; clear H0.
-      destruct (rcd_field_alookup _ _ _ _ Tx H2 H4 H) as [vx [Hlxr Htx]].
-      exists vx. apply (ST_ProjRcd _ _ _ H2 Hlxr).
+      (* If [t] is a value and [t : TRcd Tr], we can invert the
+          latter to get that [t = (trcd tr)] with [tr *: Tr] *)
+      inverts Ht; try solve by inversion...
+      (* Lemma [rcd_field_alookup] shows that [alookup x tr = Some vx] for
+         some [vx].*)
+      destruct (rcd_field_alookup _ _ _ Tx H4 H) as [vx [Hlxr Htx]].
+      (* So [tproj x t ==> vx] by [ST_ProjRcd] with the inversion of H0
+         to get that [vx] is a value.  *)
+      exists vx. inverts H0 as H0. apply (ST_ProjRcd _ _ _ H0 Hlxr).
     SCase "rcd_steps".
       (* On the other hand, if [t ==> t'], then [tproj t i ==> tproj t' i]
          by [ST_Proj1]. *)
@@ -904,18 +873,19 @@ Proof with eauto.
       inversion HT1...
 
   Case "T_Proj".
-  (* If the last rule was [T_Proj], then [t = tproj t1 i].  Two rules
-     could have caused [t ==> t']: [T_Proj1] and [T_ProjRcd].  The typing
-     of [t'] follows from the IH in the former case, so we only
-     consider [T_ProjRcd].
+    (* If the last rule was [T_Proj], then [t = tproj t0 x] 
+       where [t0 : (TRcd Tr)] and [alookup x Tr = Some T]
+       for some [t0], [x] and [Tr]. Two rules could have caused 
+       [t ==> t']: [ST_Proj1] and [ST_ProjRcd].  The typing
+       of [t'] follows from the IH in the former case.
 
-     Here we have that [t] is a record value.  Since rule T_Proj was
-     used, we know [empty |- t \in Tr] and [Talookup i Tr = Some
-     Ti] for some [i] and [Tr].  We may therefore apply lemma
-     [alookup_field_in_value] to find the record element this
-     projection steps to. *)
+       In the [ST_ProjRcd] case, [t0 = (trcd r)] for some [r]
+       where [value_rcd r] and [alookup x r = Some t'].
+       Inverting Ht gives [r *: Tr] and we can apply lemma
+       [rcd_field_alookup] to find the record element this
+       projection steps to. *)
     inverts HT.
-    destruct (rcd_field_alookup _ _ _ _ _ H2 H5 H) as [vx [ Hlxr Htx]].
+    destruct (rcd_field_alookup _ _ _ _ H5 H) as [vx [ Hlxr Htx]].
     rewrite H4 in Hlxr. inversion Hlxr...
 
 Qed.
