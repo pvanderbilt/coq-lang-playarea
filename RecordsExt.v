@@ -28,7 +28,9 @@ Module Records.
 Inductive ty : Type :=
   | TBase     : id -> ty
   | TArrow    : ty -> ty -> ty
-  | TRcd      : (alist ty) -> ty.
+  | TRcd      : (list decl) -> ty
+with decl : Type :=
+  | Lv        : id -> ty -> decl.
 
 Tactic Notation "T_cases" tactic(first) ident(c) :=
   first;
@@ -49,17 +51,104 @@ Tactic Notation "T_cases" tactic(first) ident(c) :=
 The last two clauses were added. *)
 
 Inductive tm : Type :=
-  | tvar : id -> tm
-  | tapp : tm -> tm -> tm
-  | tabs : id -> ty -> tm -> tm
+  | tvar  : id -> tm
+  | tapp  : tm -> tm -> tm
+  | tabs  : id -> ty -> tm -> tm
   | tproj : tm -> id -> tm
-  | trcd: alist tm -> tm.
+  | trcd  : list def -> tm
+with def : Type :=
+  | Fv    : id -> tm -> def.
 
 Tactic Notation "t_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
   | Case_aux c "tproj" | Case_aux c "trcd"  ].
 
+
+(* *** Functions for dealing with def and decl- lists *)
+
+Definition push_vdef x t Fs := (Fv x t) :: Fs.
+Definition push_vdecl x T Ls := (Lv x T) :: Ls.
+
+Fixpoint lookup_vdef x Fs := 
+  match Fs with 
+    | nil => None 
+    | (Fv y t) :: Fs' => if eq_id_dec y x then Some t else lookup_vdef x Fs'
+    (* | _ :: Fs' => lookup_vdef x Fs' *)
+  end.
+
+Fixpoint lookup_vdecl x Ls := 
+  match Ls with 
+    | nil => None 
+    | (Lv y T) :: Ls' => if eq_id_dec y x then Some T else lookup_vdecl x Ls'
+  end.
+
+Lemma lookup_push_vdef_eq : 
+  forall (x : id) (t : tm) (Fs : list def),
+    lookup_vdef x (push_vdef x t Fs) = Some t.
+Proof.
+  intros. simpl. apply eq_id.
+Qed.
+
+Lemma lookup_push_vdef_neq :
+  forall (x y : id) (t : tm) (Fs : list def),
+    y <> x ->
+    lookup_vdef x (push_vdef y t Fs) = lookup_vdef x Fs.
+Proof.
+  intros. simpl. apply neq_id. apply H.
+Qed.
+
+Lemma lookup_push_vdecl_eq : 
+  forall (x : id) (T : ty) (Ls : list decl),
+    lookup_vdecl x (push_vdecl x T Ls) = Some T.
+Proof.
+  intros. simpl. apply eq_id.
+Qed.
+
+Lemma lookup_push_vdecl_neq :
+  forall (x y : id) (T : ty) (Ls : list decl),
+    y <> x ->
+    lookup_vdecl x (push_vdecl y T Ls) = lookup_vdecl x Ls.
+Proof.
+  intros. simpl. apply neq_id. apply H.
+Qed.
+
+(* TBD: Try some of these attempts at making the above more generic:
+
+Definition lookup_generic {T U : Type} 
+    (extrf : T -> option U) (xs : list T) : option U := 
+  match xs with 
+    | nil => None
+    | x :: xs' => 
+      match extrf x with
+        | None => lookup_generic extrf xs'
+        | Some v => Some v
+      end
+  end.
+
+Definition vdef_xf (x : id) (vd : def) : option tm :=
+  match vd with 
+    | (Vd y t) => if id_eq_dec x y then Some t else None
+    | _ => None
+  end.
+Definition lookup_vdef x Fs := lookup_generic (vdef_xf x) Fs.
+
+Definition unapply_vdef (vd : vdef) : option (id * tm) :=
+  match vd with (Fv y t) => Some (y, t) | _ => None end.
+  
+Definition lookup_gen {T U : Type} (unapplyf : T -> option (id * U)) 
+    (x : id) (ts : list T) : option U :=
+  match ts with
+    | nil => None
+    | t : ts' => 
+      match unapplyf t with
+        | Some (y v) => 
+            if id_eq_dec x y then Some v else lookup_gen unapplyf x ts'
+        | None => lookup_gen unapplyf x ts'
+      end
+  end.
+Definition lookup_vdef := lookup_gen unapply_vdef.
+*)
 
 
 (* ###################################################################### *)
@@ -73,14 +162,14 @@ Tactic Notation "t_cases" tactic(first) ident(c) :=
     forall P : ty -> Type,
       (forall i : id, P (TBase i)) ->
       (forall t : ty, P t -> forall t0 : ty, P t0 -> P (TArrow t t0)) ->
-      (forall r : alist ty, P (TRcd r)) ->
+      (forall r : list decl, P (TRcd r)) ->
     forall t : ty, P t
 >>
 
     The following custom recursion function replaces the last case 
     (a proof of [P (TRcd r)] given only that [r : aliast ty])
     with four:
-      - an additional proposition function [Q] over [alist ty] (at the top),
+      - an additional proposition function [Q] over [list decl] (at the top),
       - a proof that for record body type, [Trb], [Q Trb] implies [P (TRcd Trb)],
       - a proof of [Q nil] and
       - a proof that [P T] and [Q Trb] implies [Q (cons x T Trb))]
@@ -92,34 +181,35 @@ Tactic Notation "t_cases" tactic(first) ident(c) :=
 
 Definition ty_nested_rect
   (P: ty -> Type) 
-  (Q: alist ty -> Type)
+  (Q: list decl -> Type)
     (fTBase : forall x : id, P (TBase x))
     (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
-    (fTRcd' : forall Trb : alist ty, Q Trb -> P (TRcd Trb))
+    (fTRcd' : forall Trb : list decl, Q Trb -> P (TRcd Trb))
       (fTRcd_nil' : Q nil)
-      (fTRcd_cons' : forall (x : id) (T : ty) (Trb : alist ty), 
-                       P T -> Q Trb -> Q ((x, T) :: Trb))
+      (fTRcd_cons' : forall (x : id) (T : ty) (Trb : list decl), 
+                       P T -> Q Trb -> Q ((Lv x T) :: Trb))
   : forall T : ty, P T
   := fix F (T : ty) : P T :=
-    let fTRcd_cons b Trb := match b with (x,T) => fTRcd_cons' x T Trb (F T) end
+    let fTRcd_cons b Trb := 
+      match b with (Lv x T) => fTRcd_cons' x T Trb (F T) end
     in let fTRcd Trb := fTRcd' Trb (list_rect Q fTRcd_nil' fTRcd_cons Trb)
     in ty_rect P fTBase fTArrow fTRcd T.
 
 Definition ty_nested_rect'
   (P: ty -> Type) 
-  (Q: alist ty -> Type)
+  (Q: list decl -> Type)
     (fTBase : forall x : id, P (TBase x))
     (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
-    (fTRcd' : forall Trb : alist ty, Q Trb -> P (TRcd Trb))
+    (fTRcd' : forall Trb : list decl, Q Trb -> P (TRcd Trb))
       (fTRcd_nil' : Q nil)
-      (fTRcd_cons' : forall (x : id) (T : ty) (Trb : alist ty), 
-                       P T -> Q Trb -> Q ((x, T) :: Trb))
+      (fTRcd_cons' : forall (x : id) (T : ty) (Trb : list decl), 
+                       P T -> Q Trb -> Q ((Lv x T) :: Trb))
   : forall T : ty, P T
   := fix F (T : ty) : P T :=
-     let fix G (Trb : alist ty) : Q Trb :=
+     let fix G (Trb : list decl) : Q Trb :=
          match Trb with
            | nil => fTRcd_nil'
-           | (x,T) :: Trb' => fTRcd_cons' x T Trb' (F T) (G Trb')
+           | (Lv x T) :: Trb' => fTRcd_cons' x T Trb' (F T) (G Trb')
          end
      in match T with
        | TBase x => fTBase x
@@ -132,12 +222,12 @@ Definition ty_nested_rect'
 Lemma ty_nested_rect'' :
   forall 
     (P: ty -> Type) 
-    (Q: alist ty -> Type),
+    (Q: list decl -> Type),
     (forall x : id, P (TBase x)) ->
     (forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2)) ->
-    (forall Trb : alist ty, Q Trb -> P (TRcd Trb)) ->
+    (forall Trb : list decl, Q Trb -> P (TRcd Trb)) ->
       (Q nil) ->
-      (forall (x : id) (T : ty) (Trb : alist ty), 
+      (forall (x : id) (T : ty) (Trb : list decl), 
            P T -> Q Trb -> Q ((x, T) :: Trb)) ->
   forall T : ty, P T.
 Proof.
@@ -155,16 +245,16 @@ Definition ty_nested_rect_plus
   (P: ty -> Type) 
     (fTBase : forall x : id, P (TBase x))
     (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
-    (fTRcd : forall Trb : alist ty, 
-      (exists (Q: alist ty -> Type),
+    (fTRcd : forall Trb : list decl, 
+      (exists (Q: list decl -> Type),
               (Q nil) *
-              (forall (x : id) (T : ty) (Trb : alist ty), 
+              (forall (x : id) (T : ty) (Trb : list decl), 
                        P T -> Q Trb -> Q ((x, T) :: Trb)) *
-              (forall Trb : alist ty, (Q Trb) -> P (TRcd Trb)) ???
+              (forall Trb : list decl, (Q Trb) -> P (TRcd Trb)) ???
       ) -> P (TRcd Trb))   
   : forall T : ty, P T := admit.
   := fix F (T : ty) : P T :=
-     let fix G (Trb : alist ty) : Q Trb :=
+     let fix G (Trb : list decl) : Q Trb :=
          match Trb with
            | nil => fTRcd_nil'
            | (x,T) :: Trb' => fTRcd_cons' x T Trb' (F T) (G Trb')
@@ -184,18 +274,18 @@ Definition ty_nested_rect_plus
 
 Definition tm_nest_rect
   (P: tm -> Type) 
-  (Q: alist tm -> Type)
+  (Q: list def -> Type)
     (fvar : forall x : id, P (tvar x))
     (fapp : forall t1 : tm, P t1 -> forall t2 : tm, P t2 -> P (tapp t1 t2))
     (fabs : forall (x : id) (T : ty) (t : tm), P t -> P (tabs x T t))
     (fproj : forall t : tm, P t -> forall x : id, P (tproj t x))
-    (frcd' : forall rb : alist tm, Q rb -> P (trcd rb))
+    (frcd' : forall rb : list def, Q rb -> P (trcd rb))
       (frcd_nil' : Q nil)
-      (frcd_cons' : forall (x : id) (t : tm) (rb : alist tm), 
-                      P t -> Q rb -> Q ((x, t) :: rb))
+      (frcd_cons' : forall (x : id) (t : tm) (rb : list def), 
+                      P t -> Q rb -> Q ((Fv x t) :: rb))
   : forall t : tm, P t
   := fix F (t : tm) : P t := 
-    let frcd_cons bxt rb := match bxt with (x,t) => frcd_cons' x t rb (F t) end
+    let frcd_cons bxt rb := match bxt with (Fv x t) => frcd_cons' x t rb (F t) end
     in let frcd rb := frcd' rb (list_rect Q frcd_nil' frcd_cons rb)
     in tm_rect P fvar fapp fabs fproj frcd t.
 
@@ -217,10 +307,10 @@ Tactic Notation "t_both_cases" tactic(first) ident(c) :=
 *)
 
 Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
-  let rsubst := (fix rsubst  (a: alist tm) : alist tm := 
+  let rsubst := (fix rsubst  (a: list def) : list def := 
     match a with
       | nil => nil 
-      | (i, t) :: r' => (i, (subst x s t)) :: (rsubst r')
+      | (Fv i t) :: r' => (Fv i (subst x s t)) :: (rsubst r')
     end)
   in
   match t with
@@ -237,10 +327,10 @@ Notation "'[' x ':=' s ']' t" := (subst x s t) (at level 20).
      [subst_rcd] and a lemma is given that supports rewriting the nested
      fixpoint to it. *)
 
-Fixpoint subst_rcd (x:id) (s:tm) (a: alist tm) : alist tm := 
+Fixpoint subst_rcd (x:id) (s:tm) (a: list def) : list def := 
   match a with
     | nil => nil 
-    | (i, t) :: rb' => (i, subst x s t) :: (subst_rcd x s rb')
+    | (Fv i t) :: rb' => (Fv i (subst x s t)) :: (subst_rcd x s rb')
   end.
 
 Notation "'[' x ':=' s ']*' r" := (subst_rcd x s r) (at level 20).
@@ -249,10 +339,10 @@ Notation "'[' x ':=' s ']*' r" := (subst_rcd x s r) (at level 20).
 Lemma subst_rcd_eqv :
   forall x s a,
     [x := s]* a =
-    ((fix rsubst (a0 : alist tm) : alist tm :=
+    ((fix rsubst (a0 : list def) : list def :=
          match a0 with
          | nil => nil
-         | (i, t) :: r' => (i, [x := s]t) :: (rsubst r')
+         | (Fv i t) :: r' => (Fv i ([x := s]t)) :: (rsubst r')
          end) a).
 Proof.
   intros. induction a.
@@ -267,27 +357,27 @@ Qed.
       into a mess that I can't fold back up, so we're not using this. *)
 
 Definition subst_ugly (x:id) (s:tm) :tm -> tm := 
-  tm_nest_rect (fun _ => tm) (fun _ => alist tm)
+  tm_nest_rect (fun _ => tm) (fun _ => list def)
     (fun y => if eq_id_dec x y then s else (tvar y))                  (* tvar y *)
     (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                               (* tapp t1 t2 *)
     (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1)) (* tabs y T t1 *)
     (fun t1 mt1 i => tproj mt1 i)                                     (* tproj t1 i *)
     (fun r mr => trcd mr)                                             (* trcd r *)
       (nil)                                                           (* r=nil *)
-      (fun i t r mt mr => (i, mt) :: mr).                             (* r=cons i t r *)
+      (fun i t r mt mr => (Fv i mt) :: mr).                           (* r=cons i t r *)
 
 
 (*
-Definition tm_rect_nest (P: tm -> Type) (Q: alist tm -> Type)
+Definition tm_rect_nest (P: tm -> Type) (Q: list def -> Type)
   (fvar : forall i : id, P (tvar i))
   (fapp : forall t : tm,
         P t -> forall t0 : tm, P t0 -> P (tapp t t0))
   (fabs : forall (i : id) (t : ty) (t0 : tm),
         P t0 -> P (tabs i t t0))
   (fproj : forall t : tm, P t -> forall i : id, P (tproj t i))
-  (frcd : forall a : alist tm, Q a -> P (trcd a))
+  (frcd : forall a : list def, Q a -> P (trcd a))
   (frcd_nil : Q nil)
-  (frcd_cons : forall (i : id) (t : tm) (a : alist tm), P t -> Q a -> Q (cons i t a))
+  (frcd_cons : forall (i : id) (t : tm) (a : list def), P t -> Q a -> Q (cons i t a))
  := fix F (t : tm) : P t := 
   match t as t' return (P t') with
     | tvar i => fvar i
@@ -315,8 +405,8 @@ Definition tm_rect_nest_map
   (fabs : id -> ty ->  tm -> tm -> tm)
   (fproj : tm -> tm -> id -> tm)
  := tm_nest_rect
-      (fun _ => tm)  (fun _ => alist tm) fvar fapp fabs fproj
-      (fun r mr => trcd mr) nil (fun i t r mt mr => (i, mt) :: mr).
+      (fun _ => tm)  (fun _ => list def) fvar fapp fabs fproj
+      (fun r mr => trcd mr) nil (fun i t r mt mr => (Fv i mt) :: mr).
 
 
 Definition subst'' (x:id) (s:tm) :tm -> tm := 
@@ -332,14 +422,14 @@ Proof. unfold substf_ok. repeat split. Qed.
 *)
 
 Definition tm_id (t : tm) : tm := 
-  tm_nest_rect (fun _ => tm) (fun _ => alist tm)
+  tm_nest_rect (fun _ => tm) (fun _ => list def)
     (fun y => tvar y)
     (fun  t1 mt1 t2 mt2 => tapp mt1 mt2)
     (fun y T t1 mt1 =>  tabs y T t1)
     (fun  t1 mt1 i => tproj mt1 i)
     (fun r mr => trcd mr)
     (nil)
-    (fun i t r mt mr => (i, mt) :: mr)
+    (fun i t r mt mr => (Fv i mt) :: mr)
     t.
 (*
 Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
@@ -359,6 +449,7 @@ Proof. reflexivity. Qed.
 >> 
 A record is a value if all of its fields are. *)
 
+
 Inductive value : tm -> Prop :=
   | v_abs : forall x T11 t12,
       value (tabs x T11 t12)
@@ -366,13 +457,13 @@ Inductive value : tm -> Prop :=
       value_rcd r -> 
       value (trcd r)
 
-with value_rcd : (alist tm) -> Prop :=
+with value_rcd : (list def) -> Prop :=
   | vr_nil : 
       value_rcd nil
   | vr_cons : forall x v1 vr,
       value v1 ->
       value_rcd vr ->
-      value_rcd (aextend x v1 vr).
+      value_rcd (push_vdef x v1 vr).
 
 Hint Constructors value value_rcd.
 
@@ -411,20 +502,20 @@ Inductive step : tm -> tm -> Prop :=
         (tproj t1 i) ==> (tproj t1' i)
   | ST_ProjRcd : forall r x vx,
         value_rcd r ->
-        alookup x r = Some vx ->
+        lookup_vdef x r = Some vx ->
         (tproj (trcd r) x) ==> vx
   | ST_Rcd : forall rb rb',
         rb *==> rb' ->
         (trcd rb) ==> (trcd rb')
 
-with step_rcd : (alist tm) -> (alist tm) -> Prop := 
+with step_rcd : (list def) -> (list def) -> Prop := 
   | STR_Head : forall x t t' rb,
         t ==> t' ->
-        (aextend x t rb) *==> (aextend x t' rb)
+        (push_vdef x t rb) *==> (push_vdef x t' rb)
   | STR_Tail : forall x v rb rb',
         value v ->
         rb *==> rb' ->
-        (aextend x v rb) *==> (aextend x v rb')
+        (push_vdef x v rb) *==> (push_vdef x v rb')
 
 where "t1 '==>' t2" := (step t1 t2)
 and "rb1 '*==>' rb2" := (step_rcd rb1 rb2).
@@ -478,19 +569,19 @@ Inductive has_type : context -> tm -> ty -> Prop :=
   (* records: *)
   | T_Proj : forall Gamma x t Tx Tr,
       Gamma |- t \in (TRcd Tr) ->
-      alookup x Tr = Some Tx ->
+      lookup_vdecl x Tr = Some Tx ->
       Gamma |- (tproj t x) \in Tx
   | T_Rcd : forall Gamma tr Tr,
       Gamma |- tr *\in Tr ->
       Gamma |- (trcd tr) \in (TRcd Tr)
 
-with rcd_has_type : context -> (alist tm) -> (alist ty) -> Prop :=
+with rcd_has_type : context -> (list def) -> (list decl) -> Prop :=
   | TR_Nil : forall Gamma,
       Gamma |- nil *\in nil
   | TR_Cons : forall Gamma x t T tr Tr,
       Gamma |- t \in T ->
       Gamma |- tr *\in Tr ->
-      Gamma |- (aextend x t tr) *\in (aextend x T Tr)
+      Gamma |- (push_vdef x t tr) *\in (push_vdecl x T Tr)
 
 where "Gamma '|-' t '\in' T" := (has_type Gamma t T)
 and   "Gamma '|-' r '*\in' Tr" := (rcd_has_type Gamma r Tr).
@@ -524,11 +615,11 @@ Tactic Notation "has_type_both_cases" tactic(first) ident(c) :=
 (* ###################################################################### *)
 (** *** Record Field Lookup *)
 
-Lemma rcd_field_alookup : 
+Lemma rcd_field_lookup : 
   forall rb Trb x Tx,
     empty |- rb *\in Trb ->
-    alookup x Trb = Some Tx ->
-    exists vx, alookup x rb = Some vx /\ empty |- vx \in Tx.
+    lookup_vdecl x Trb = Some Tx ->
+    exists vx, lookup_vdef x rb = Some vx /\ empty |- vx \in Tx.
 Proof.
   intros rb Tr x Tx Ht Hl.
   induction Ht as [| G y vy Ty rb' Trb' Hty Ht]. 
@@ -536,15 +627,15 @@ Proof.
   Case "cons".
     destruct (eq_id_dec y x).
       SCase "x=y". subst. 
-        rewrite (alookup_aextend_eq _ _ Ty Trb' ) in Hl. inverts Hl.
+        rewrite (lookup_push_vdecl_eq x Ty Trb') in Hl. inverts Hl.
         exists vy. split.
-          apply alookup_cons_eq.
+          apply lookup_push_vdef_eq.
           apply Hty.
       SCase "y<>x".
-        rewrite (alookup_aextend_neq _ _ _ Ty _ n) in Hl. 
+        rewrite (lookup_push_vdecl_neq _ _ Ty Trb' n) in Hl. 
         destruct (IHHt Hl) as [vx [Hlx HTx]]; clear IHHt.
         exists vx. split.
-          rewrite (alookup_aextend_neq _ _ _ _ _ n). apply Hlx.
+          rewrite (lookup_push_vdef_neq _ _ _ _ n). apply Hlx.
           apply HTx.
 Qed.
 
@@ -617,9 +708,9 @@ Proof with eauto.
       (* If [t] is a value and [t : TRcd Tr], we can invert the
           latter to get that [t = (trcd tr)] with [tr *: Tr] *)
       inverts Ht; try solve by inversion...
-      (* Lemma [rcd_field_alookup] shows that [alookup x tr = Some vx] for
+      (* Lemma [rcd_field_lookup] shows that [lookup_vdef x tr = Some vx] for
          some [vx].*)
-      destruct (rcd_field_alookup _ _ _ Tx H4 H) as [vx [Hlxr Htx]].
+      destruct (rcd_field_lookup _ _ _ Tx H4 H) as [vx [Hlxr Htx]].
       (* So [tproj x t ==> vx] by [ST_ProjRcd] with the inversion of H0
          to get that [vx] is a value.  *)
       exists vx. inverts H0 as H0. apply (ST_ProjRcd _ _ _ H0 Hlxr).
@@ -680,13 +771,13 @@ Inductive appears_free_in : id -> tm -> Prop :=
      appears_free_in_rcd x r -> 
      appears_free_in x (trcd r)
 
-with appears_free_in_rcd : id -> (alist tm) -> Prop :=
+with appears_free_in_rcd : id -> (list def) -> Prop :=
   | afi_rhead : forall x i ti r',
       appears_free_in x ti ->
-      appears_free_in_rcd x (aextend i ti r')
+      appears_free_in_rcd x (push_vdef i ti r')
   | afi_rtail : forall x i ti r',
       appears_free_in_rcd x r' ->
-      appears_free_in_rcd x (aextend i ti r').
+      appears_free_in_rcd x (push_vdef i ti r').
 
 Hint Constructors appears_free_in appears_free_in_rcd.
 
@@ -754,7 +845,7 @@ Proof with eauto 15.
      whether it is a record term. *)
   Ltac spt_induction t x v U := induction t using tm_nest_rect with 
     (Q := fun r =>
-      forall (RT : alist ty) (Gamma : partial_map ty),
+      forall (RT : list decl) (Gamma : partial_map ty),
         (extend Gamma x U) |- r *\in RT -> 
         Gamma |- (subst_rcd x v r) *\in RT).
   t_both_cases (spt_induction t x v U) Case; 
@@ -845,7 +936,7 @@ Proof with eauto.
      contradictory ([T_Var], [T_Abs]) or follow directly from the IH
      ([T_RCons]).  We show just the interesting ones. *)
   Ltac pres_ind_tactic HT := induction HT using has_type_ind_both
-    with (P0 := fun Gamma tr Tr => forall tr' : alist tm,
+    with (P0 := fun Gamma tr Tr => forall tr' : list def,
        Gamma = \empty -> 
        tr *==> tr' ->
        Gamma |- tr' *\in Tr).
@@ -874,18 +965,18 @@ Proof with eauto.
 
   Case "T_Proj".
     (* If the last rule was [T_Proj], then [t = tproj t0 x] 
-       where [t0 : (TRcd Tr)] and [alookup x Tr = Some T]
+       where [t0 : (TRcd Tr)] and [lookup_vdecl x Tr = Some T]
        for some [t0], [x] and [Tr]. Two rules could have caused 
        [t ==> t']: [ST_Proj1] and [ST_ProjRcd].  The typing
        of [t'] follows from the IH in the former case.
 
        In the [ST_ProjRcd] case, [t0 = (trcd r)] for some [r]
-       where [value_rcd r] and [alookup x r = Some t'].
+       where [value_rcd r] and [lookup_vdef x r = Some t'].
        Inverting Ht gives [r *: Tr] and we can apply lemma
-       [rcd_field_alookup] to find the record element this
+       [rcd_field_lookup] to find the record element this
        projection steps to. *)
     inverts HT.
-    destruct (rcd_field_alookup _ _ _ _ H5 H) as [vx [ Hlxr Htx]].
+    destruct (rcd_field_lookup _ _ _ _ H5 H) as [vx [ Hlxr Htx]].
     rewrite H4 in Hlxr. inversion Hlxr...
 
 Qed.
