@@ -21,7 +21,7 @@ Module Records.
 (**  *** Types [ty]
 <<
            | X                           base type X
-           | Bool                        boolean type (* not here *)
+           | Bool                        boolean type
            | T1 -> T2                    function type
            | {i1:T1, ..., in:Tn}         record type
 >> 
@@ -29,6 +29,7 @@ Module Records.
 
 Inductive ty : Type :=
   | TBase     : id -> ty
+  | TBool     : ty
   | TArrow    : ty -> ty -> ty
   | TRcd      : (list decl) -> ty
 with decl : Type :=
@@ -36,7 +37,8 @@ with decl : Type :=
 
 Tactic Notation "T_cases" tactic(first) ident(c) :=
   first;
-  [ Case_aux c "TBase" | Case_aux c "TArrow" | Case_aux c "TRcd" ].
+  [ Case_aux c "TBase" | Case_aux c "TBool" 
+  | Case_aux c "TArrow" | Case_aux c "TRcd" ].
 
 (** In SF there is a note about how something like this doesn't 
     give a useful induction principle we want.  So they have
@@ -56,27 +58,33 @@ Tactic Notation "T_cases" tactic(first) ident(c) :=
 (** *** Terms [tm]
 <<
        t ::=                          Terms:
+           | true, false                 boolean values
            | x                           variable
            | t1 t2                       application
-           | lambda x. t                 abstraction
+           | \x:T1.t2                    abstraction
            | {i1=t1, ..., in=tn}         record 
            | t.i                         projection
+           | if tb then te else tf       conditional
 >> 
-The last two clauses were added. *)
+*)
 
 Inductive tm : Type :=
+  | ttrue : tm
+  | tfalse : tm
   | tvar  : id -> tm
   | tapp  : tm -> tm -> tm
   | tabs  : id -> ty -> tm -> tm
   | trcd  : list def -> tm
   | tproj : tm -> id -> tm
+  | tif : tm -> tm -> tm -> tm
 with def : Type :=
   | Fv    : id -> tm -> def.
 
 Tactic Notation "t_cases" tactic(first) ident(c) :=
   first;
-  [ Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
-  | Case_aux c "trcd" | Case_aux c "tproj"  ].
+  [ Case_aux c "ttrue" | Case_aux c "tfalse" 
+  | Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
+  | Case_aux c "trcd" | Case_aux c "tproj"| Case_aux c "tif" ].
 
 
 (* *** Functions for dealing with def and decl- lists *)
@@ -177,6 +185,7 @@ Definition lookup_vdef := lookup_gen unapply_vdef.
   ty_rect : 
     forall P : ty -> Type,
       (forall i : id, P (TBase i)) ->
+      P TBool ->
       (forall t : ty, P t -> forall t0 : ty, P t0 -> P (TArrow t t0)) ->
       (forall r : list decl, P (TRcd r)) ->
     forall t : ty, P t
@@ -199,6 +208,7 @@ Definition ty_nested_rect
   (P: ty -> Type) 
   (Q: list decl -> Type)
     (fTBase : forall x : id, P (TBase x))
+    (fTBool : P (TBool))
     (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
     (fTRcd' : forall Trb : list decl, Q Trb -> P (TRcd Trb))
       (fTRcd_nil' : Q nil)
@@ -209,12 +219,13 @@ Definition ty_nested_rect
     let fTRcd_cons b Trb := 
       match b with (Lv x T) => fTRcd_cons' x T Trb (F T) end
     in let fTRcd Trb := fTRcd' Trb (list_rect Q fTRcd_nil' fTRcd_cons Trb)
-    in ty_rect P fTBase fTArrow fTRcd T.
+    in ty_rect P fTBase fTBool fTArrow fTRcd T.
 
 Definition ty_nested_rect'
   (P: ty -> Type) 
   (Q: list decl -> Type)
     (fTBase : forall x : id, P (TBase x))
+    (fTBool : P (TBool))
     (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
     (fTRcd' : forall Trb : list decl, Q Trb -> P (TRcd Trb))
       (fTRcd_nil' : Q nil)
@@ -229,6 +240,7 @@ Definition ty_nested_rect'
          end
      in match T with
        | TBase x => fTBase x
+       | TBool => fTBool
        | TArrow T1 T2 => fTArrow T1 (F T1) T2 (F T2)
        | TRcd Trb => fTRcd' Trb (G Trb)
      end.
@@ -291,6 +303,8 @@ Definition ty_nested_rect_plus
 Definition tm_nest_rect
   (P: tm -> Type) 
   (Q: list def -> Type)
+    (ftrue : P ttrue)
+    (ffalse : P tfalse)
     (fvar : forall x : id, P (tvar x))
     (fapp : forall t1 : tm, P t1 -> forall t2 : tm, P t2 -> P (tapp t1 t2))
     (fabs : forall (x : id) (T : ty) (t : tm), P t -> P (tabs x T t))
@@ -299,17 +313,21 @@ Definition tm_nest_rect
       (frcd_cons' : forall (x : id) (t : tm) (rb : list def),
                       P t -> Q rb -> Q ((Fv x t) :: rb))
     (fproj : forall t : tm, P t -> forall x : id, P (tproj t x)) 
+    (fif : forall tb : tm, P tb -> 
+           forall tt : tm, P tt -> 
+           forall te : tm, P te -> P (tif tb tt te)) 
   : forall t : tm, P t
   := fix F (t : tm) : P t := 
     let frcd_cons bxt rb := match bxt with (Fv x t) => frcd_cons' x t rb (F t) end
     in let frcd rb := frcd' rb (list_rect Q frcd_nil' frcd_cons rb)
-    in tm_rect P fvar fapp fabs frcd fproj t.
+    in tm_rect P ftrue ffalse fvar fapp fabs frcd fproj fif t.
 
 Tactic Notation "t_both_cases" tactic(first) ident(c) :=
   first;
-  [ Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
+  [ Case_aux c "ttrue" | Case_aux c "tfalse" 
+  | Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
   | Case_aux c "trcd" | Case_aux c "trnil" | Case_aux c "trcons"
-  | Case_aux c "tproj" ].
+  | Case_aux c "tproj" | Case_aux c "tif" ].
 
 
 
@@ -322,22 +340,28 @@ Tactic Notation "t_both_cases" tactic(first) ident(c) :=
      [with] clause.  [subst] can be defined with a nested fixpoint, as follows: 
 *)
 
+Reserved Notation "'[' x ':=' s ']' t" (at level 20).
+Reserved Notation "'[' x ':=' s ']*' r" (at level 20).
+
 Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
   let rsubst := (fix rsubst  (a: list def) : list def := 
     match a with
       | nil => nil 
-      | (Fv i t) :: r' => (Fv i (subst x s t)) :: (rsubst r')
+      | (Fv i t) :: r' => (Fv i ([x:=s] t)) :: (rsubst r')
     end)
   in
   match t with
+    | ttrue => ttrue
+    | tfalse => tfalse
     | tvar y => if eq_id_dec x y then s else t
     | tabs y T t1 =>  tabs y T (if eq_id_dec x y then t1 else (subst x s t1))
-    | tapp t1 t2 => tapp (subst x s t1) (subst x s t2)
+    | tapp t1 t2 => tapp ([x:=s] t1) ([x:=s] t2)
     | trcd r => trcd (rsubst r)
-    | tproj t1 i => tproj (subst x s t1) i
-  end.
+    | tproj t1 i => tproj ([x:=s] t1) i
+    | tif t1 t2 t3 => tif ([x:=s] t1) ([x:=s] t2) ([x:=s] t3)
+  end
 
-Notation "'[' x ':=' s ']' t" := (subst x s t) (at level 20).
+where "'[' x ':=' s ']' t" := (subst x s t).
 
 (**  In order to make the nested fixpoint visible, it is defined again as
      [subst_rcd] and a lemma is given that supports rewriting the nested
@@ -346,10 +370,10 @@ Notation "'[' x ':=' s ']' t" := (subst x s t) (at level 20).
 Fixpoint subst_rcd (x:id) (s:tm) (a: list def) : list def := 
   match a with
     | nil => nil 
-    | (Fv i t) :: rb' => (Fv i (subst x s t)) :: (subst_rcd x s rb')
-  end.
+    | (Fv i t) :: rb' => (Fv i ([x:=s] t)) :: ([x:=s]* rb')
+  end
 
-Notation "'[' x ':=' s ']*' r" := (subst_rcd x s r) (at level 20).
+where "'[' x ':=' s ']*' r" := (subst_rcd x s r).
 
 
 Lemma subst_rcd_eqv :
@@ -374,6 +398,8 @@ Qed.
 
 Definition subst_ugly (x:id) (s:tm) :tm -> tm := 
   tm_nest_rect (fun _ => tm) (fun _ => list def)
+    ttrue                                                             (* ttrue *)
+    tfalse                                                            (* tfalse *)
     (fun y => if eq_id_dec x y then s else (tvar y))                  (* tvar y *)
     (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                               (* tapp t1 t2 *)
     (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1)) (* tabs y T t1 *)
@@ -381,6 +407,7 @@ Definition subst_ugly (x:id) (s:tm) :tm -> tm :=
       (nil)                                                           (* r=nil *)
       (fun i t r mt mr => (Fv i mt) :: mr)                            (* r=cons i t r *)
     (fun t1 mt1 i => tproj mt1 i)                                     (* tproj t1 i *)
+    (fun tb mtb tt mtt te mte => tif mtb mtt mte)                     (* tif tb tt te *)
     .
 
 (*
@@ -416,37 +443,45 @@ Fixpoint alist_all {T : Type} (P : T-> Prop) (a: alist T) : Prop :=
   end.
 
 Definition tm_rect_nest_map
+  (ftrue : tm)
+  (ffalse : tm)
   (fvar : id -> tm)
   (fapp : tm -> tm -> tm -> tm -> tm)
   (fabs : id -> ty ->  tm -> tm -> tm)
   (fproj : tm -> tm -> id -> tm)
+  (fif : tm -> tm -> tm -> tm -> tm -> tm -> tm)
  := tm_nest_rect
-      (fun _ => tm)  (fun _ => list def) fvar fapp fabs
-      (fun r mr => trcd mr) nil (fun i t r mt mr => (Fv i mt) :: mr) fproj.
+      (fun _ => tm)  (fun _ => list def) ftrue ffalse fvar fapp fabs
+      (fun r mr => trcd mr) nil (fun i t r mt mr => (Fv i mt) :: mr) fproj fif.
 
 
-Definition subst'' (x:id) (s:tm) :tm -> tm := 
+Definition subst'' (x:id) (s:tm) : tm -> tm := 
   tm_rect_nest_map
+    ttrue
+    tfalse
     (fun y => if eq_id_dec x y then s else (tvar y))
-    (fun  t1 mt1 t2 mt2 => tapp mt1 mt2)
+    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)
     (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1))
-    (fun  t1 mt1 i => tproj mt1 i).
+    (fun t1 mt1 i => tproj mt1 i)
+    (fun tb mtb tt mtt te mte => tif mtb mtt mte).
 
 (*
 Example subst''_ok :substf_ok subst''.
 Proof. unfold substf_ok. repeat split. Qed.
 *)
 
-Definition tm_id (t : tm) : tm := 
+Definition tm_id : tm -> tm := 
   tm_nest_rect (fun _ => tm) (fun _ => list def)
+    ttrue 
+    tfalse
     (fun y => tvar y)
-    (fun  t1 mt1 t2 mt2 => tapp mt1 mt2)
+    (fun t1 mt1 t2 mt2 => tapp t1 t2)
     (fun y T t1 mt1 =>  tabs y T t1)
-    (fun r mr => trcd mr)
+    (fun r mr => trcd r)
     (nil)
-    (fun i t r mt mr => (Fv i mt) :: mr)
-    (fun  t1 mt1 i => tproj mt1 i)
-    t.
+    (fun i t r mt mr => (Fv i t) :: r)
+    (fun t1 mt1 i => tproj t1 i)
+    (fun tb mtb tt mtt te mte => tif tb tt te).
 (*
 Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
     =  (tapp (tvar f) (tvar a)).
@@ -459,14 +494,19 @@ Proof. reflexivity. Qed.
 (** *** Values 
 <<
        v ::=                          Values:
-           | ...
+           | true | false
+           | lambda x : T . t
            | {i1=v1, ..., in=vn}         record value
 
 >> 
-A record is a value if all of its fields are. *)
+Note that a record is a value if all of its fields are. *)
 
 
 Inductive value : tm -> Prop :=
+  | v_true : 
+      value ttrue
+  | v_false : 
+      value tfalse
   | v_abs : forall x T11 t12,
       value (tabs x T11 t12)
   | v_rcd : forall r, 
@@ -486,9 +526,18 @@ Hint Constructors value value_rcd.
 
 (** *** Reduction rules
 <<
-                                 ti ==> ti'                            (ST_Rcd)
-    --------------------------------------------------------------------  
-    {i1=v1, ..., im=vm, in=tn, ...} ==> {i1=v1, ..., im=vm, in=tn', ...}
+                               value v2
+                     ----------------------------                   (ST_AppAbs)
+                     (\x:T.t12) v2 ==> [x:=v2]t12
+
+                              t1 ==> t1'
+                           ----------------                           (ST_App1)
+                           t1 t2 ==> t1' t2
+
+                              value v1
+                              t2 ==> t2'
+                           ----------------                           (ST_App2)
+                           v1 t2 ==> v1 t2'
 
                                  t1 ==> t1'
                                --------------                        (ST_Proj1)
@@ -496,6 +545,21 @@ Hint Constructors value value_rcd.
 
                           -------------------------                (ST_ProjRcd)
                           {..., i=vi, ...}.i ==> vi
+
+                                 ti ==> ti'                            (ST_Rcd)
+    --------------------------------------------------------------------  
+    {i1=v1, ..., im=vm, in=tn, ...} ==> {i1=v1, ..., im=vm, in=tn', ...}
+
+                    --------------------------------                (ST_IfTrue)
+                    (if true then t1 else t2) ==> t1
+
+                    ---------------------------------              (ST_IfFalse)
+                    (if false then t1 else t2) ==> t2
+
+                              t1 ==> t1'
+         ----------------------------------------------------           (ST_If)
+         (if t1 then t2 else t3) ==> (if t1' then t2 else t3)
+
 >> 
 *)
 
@@ -523,6 +587,13 @@ Inductive step : tm -> tm -> Prop :=
   | ST_Rcd : forall rb rb',
         rb *==> rb' ->
         (trcd rb) ==> (trcd rb')
+  | ST_IfTrue : forall t1 t2,
+        (tif ttrue t1 t2) ==> t1
+  | ST_IfFalse : forall t1 t2,
+        (tif tfalse t1 t2) ==> t2
+  | ST_If : forall t1 t1' t2 t3,
+        t1 ==> t1' ->
+        (tif t1 t2 t3) ==> (tif t1' t2 t3)
 
 with step_rcd : (list def) -> (list def) -> Prop := 
   | STR_Head : forall x t t' rb,
@@ -539,7 +610,8 @@ and "rb1 '*==>' rb2" := (step_rcd rb1 rb2).
 Tactic Notation "step_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "ST_AppAbs" | Case_aux c "ST_App1" | Case_aux c "ST_App2"
-  | Case_aux c "ST_Proj1" | Case_aux c "ST_ProjRcd" | Case_aux c "ST_Rcd" ].
+  | Case_aux c "ST_Proj1" | Case_aux c "ST_ProjRcd" | Case_aux c "ST_Rcd" 
+  | Case_aux c "ST_IfTrue" | Case_aux c "ST_IfFalse" | Case_aux c "ST_If"].
 
 Tactic Notation "step_rcd_cases" tactic(first) ident(c) :=
   first;
@@ -552,18 +624,9 @@ Hint Constructors step step_rcd.
  
 
 (* ###################################################################### *)
-(** ** Typing
-<<
+(** ** Typing *)
 
-               Gamma |- t1 : T1     ...     Gamma |- tn : Tn
-             --------------------------------------------------         (T_Rcd)
-             Gamma |- {i1=t1, ..., in=tn} : {i1:T1, ..., in:Tn}
-
-                       Gamma |- t : {..., i:Ti, ...}
-                       -----------------------------                   (T_Proj)
-                             Gamma |- t.i : Ti
->> 
-*)
+(** ** Contexts *)
 
 Definition context := list decl.
 Definition empty := nil (A:=decl).
@@ -582,6 +645,49 @@ Proof.
   intros. unfold extend, lookup_vdecl. rewrite neq_id; auto. 
 Qed.
 
+(** *** Typing rules:
+<<
+                             Gamma x = T
+                            --------------                              (T_Var)
+                            Gamma |- x : T
+
+                      Gamma , x:T11 |- t12 : T12
+                     ----------------------------                       (T_Abs)
+                     Gamma |- \x:T11.t12 : T11->T12
+
+                        Gamma |- t1 : T11->T12
+                          Gamma |- t2 : T11
+                        ----------------------                          (T_App)
+                         Gamma |- t1 t2 : T12
+
+               Gamma |- [i1=t1, ..., in=tn] *: [1:T1, ..., in:Tn]
+             --------------------------------------------------         (T_Rcd)
+             Gamma |- {i1=t1, ..., in=tn} : {i1:T1, ..., in:Tn}
+
+                       Gamma |- t : {..., i:Ti, ...}
+                       -----------------------------                   (T_Proj)
+                             Gamma |- t.i : Ti
+
+                         --------------------                          (T_True)
+                         Gamma |- true : Bool
+
+                        ---------------------                         (T_False)
+                        Gamma |- false : Bool
+
+       Gamma |- t1 : Bool    Gamma |- t2 : T    Gamma |- t3 : T
+       --------------------------------------------------------          (T_If)
+                  Gamma |- if t1 then t2 else t3 \in : T  
+
+                        -------------------                            (TR_Nil)
+                        Gamma |- []  *:  []
+
+                           Gamma |- t : T
+                          Gamma |- tr *: Tr
+                  ---------------------------------                   (TR_Cons)
+                  Gamma |- i=t :: tr  *:  i:T :: Tr
+>> 
+*)
+
 Reserved Notation "Gamma '|-' t '\in' T" (at level 40).
 Reserved Notation "Gamma '|-' r '*\in' Tr" (at level 40).
 
@@ -596,14 +702,22 @@ Inductive has_type : context -> tm -> ty -> Prop :=
       Gamma |- t1 \in (TArrow T1 T2) -> 
       Gamma |- t2 \in T1 -> 
       Gamma |- (tapp t1 t2) \in T2
-  (* records: *)
+  | T_Rcd : forall Gamma tr Tr,
+      Gamma |- tr *\in Tr ->
+      Gamma |- (trcd tr) \in (TRcd Tr)
   | T_Proj : forall Gamma x t Tx Tr,
       Gamma |- t \in (TRcd Tr) ->
       lookup_vdecl x Tr = Some Tx ->
       Gamma |- (tproj t x) \in Tx
-  | T_Rcd : forall Gamma tr Tr,
-      Gamma |- tr *\in Tr ->
-      Gamma |- (trcd tr) \in (TRcd Tr)
+  | T_True : forall Gamma,
+       Gamma |- ttrue \in TBool
+  | T_False : forall Gamma,
+       Gamma |- tfalse \in TBool
+  | T_If : forall t1 t2 t3 T Gamma,
+       Gamma |- t1 \in TBool ->
+       Gamma |- t2 \in T ->
+       Gamma |- t3 \in T ->
+       Gamma |- tif t1 t2 t3 \in T
 
 with rcd_has_type : context -> (list def) -> (list decl) -> Prop :=
   | TR_Nil : forall Gamma,
@@ -621,7 +735,8 @@ Hint Constructors has_type rcd_has_type.
 Tactic Notation "has_type_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "T_Var" | Case_aux c "T_Abs" | Case_aux c "T_App"
-  | Case_aux c "T_Proj" | Case_aux c "T_Rcd" ].
+  | Case_aux c "T_Rcd" | Case_aux c "T_Proj" 
+  | Case_aux c "T_True" | Case_aux c "T_False" | Case_aux c "T_If" ].
 
 Tactic Notation "rcd_has_type_cases" tactic(first) ident(c) :=
   first;
@@ -633,7 +748,8 @@ with rcd_has_type_ind_both := Minimality for rcd_has_type Sort Prop.
 Tactic Notation "has_type_both_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "T_Var" | Case_aux c "T_Abs" | Case_aux c "T_App"
-  | Case_aux c "T_Proj" | Case_aux c "T_Rcd" 
+  | Case_aux c "T_Rcd" | Case_aux c "T_Proj" 
+  | Case_aux c "T_True" | Case_aux c "T_False" | Case_aux c "T_If"
   | Case_aux c "TR_Nil" | Case_aux c "TR_Cons" ].
 
 
@@ -687,19 +803,16 @@ Proof with eauto.
     with (P0 := fun G tr Tr => 
        G = empty -> 
        value_rcd tr \/ (exists tr', tr *==> tr')).
-  has_type_both_cases (p_ind_tactic Ht) Case; intros HeqGamma; subst.
-  (* was:  has_type_cases (induction Ht) Case; intros HeqGamma; subst. *)
+  has_type_both_cases (p_ind_tactic Ht) Case; intros HeqGamma; subst; 
+    try (left; auto; fail).
+     (* the [try  (left; auto; fail)] tactic handles the value cases 
+      (T_Abs, T_True, T_False, TR_Nil) *)
 
   Case "T_Var".
     (* The final rule in the given typing derivation cannot be [T_Var],
        since it can never be the case that [empty |- x : T] (since the
        context is empty). *)
     inversion H.
-
-  Case "T_Abs".
-    (* If the [T_Abs] rule was the last used, then [t = tabs x T11 t12],
-       which is a value. *)
-    left...
 
   Case "T_App".
     (* If the last rule applied was T_App, then [t = t1 t2], and we know 
@@ -727,6 +840,15 @@ Proof with eauto.
       (* Finally, If [t1 ==> t1'], then [t1 t2 ==> t1' t2] by [ST_App1]. *)
       destruct H as [t1' Hstp]. exists (tapp t1' t2)...
 
+  Case "T_Rcd".
+    (* If the last rule in the given derivation is [T_Rcd], then 
+       [t = (trcd tr)], [T=(Trcd Tr)] and [empty |- tr *: Tr]. 
+      The combined induction rule requires that P0->P 
+      which is what we establish here. *)
+    destruct (IHHt eq_refl) as [Hv | [tr' Hst]]; clear IHHt.
+      SCase "value_rcd tr". left. apply (v_rcd _ Hv).
+      SCase "tr *==> tr". right. exists (trcd tr'). apply (ST_Rcd _ _ Hst).
+
   Case "T_Proj".
     (* If the last rule in the given derivation is [T_Proj], then 
        [t = tproj t i] and
@@ -749,18 +871,15 @@ Proof with eauto.
          by [ST_Proj1]. *)
       destruct H0 as [t' Hstp]. exists (tproj t' x)...
 
-  Case "T_Rcd".
-    (* If the last rule in the given derivation is [T_Rcd], then 
-       [t = (trcd tr)], [T=(Trcd Tr)] and [empty |- tr *: Tr]. 
-      The combined induction rule requires that P0->P 
-      which is what we establish here. *)
-    destruct (IHHt eq_refl) as [Hv | [tr' Hst]]; clear IHHt.
-      SCase "value_rcd tr". left. apply (v_rcd _ Hv).
-      SCase "tr *==> tr". right. exists (trcd tr'). apply (ST_Rcd _ _ Hst).
+  Case "T_If".
+    right. destruct IHHt1...
 
-  Case "TR_Nil". 
-    (* If the last rule was [T_Rcd] established by [TR_Nil], it's a value. *)
-    left. apply vr_nil.
+    SCase "t1 is a value".
+      inverts H; try inversion Ht1; eauto.
+      (* destruct (canonical_forms_bool t1); subst; eauto.*)
+
+    SCase "t1 also steps".
+      inversion H as [t1' Hstp]. exists (tif t1' t2 t3)...
 
   Case "TR_Cons".
     (* If the last rule was [T_Rcd] established by [TR_Cons], then 
@@ -800,6 +919,15 @@ Inductive appears_free_in : id -> tm -> Prop :=
   | afi_rcd : forall x r,
      appears_free_in_rcd x r -> 
      appears_free_in x (trcd r)
+  | afi_if1 : forall x t1 t2 t3,
+      appears_free_in x t1 ->
+      appears_free_in x (tif t1 t2 t3)
+  | afi_if2 : forall x t1 t2 t3,
+      appears_free_in x t2 ->
+      appears_free_in x (tif t1 t2 t3)
+  | afi_if3 : forall x t1 t2 t3,
+      appears_free_in x t3 ->
+      appears_free_in x (tif t1 t2 t3)
 
 with appears_free_in_rcd : id -> (list def) -> Prop :=
   | afi_rhead : forall x i ti r',
@@ -816,7 +944,7 @@ Lemma context_invariance : forall Gamma Gamma' t S,
      (forall x, appears_free_in x t -> 
                 lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
      Gamma' |- t \in S.
-Proof with eauto.
+Proof with eauto 15.
   intros. generalize dependent Gamma'.
   Ltac ci_ind_tactic H := induction H using has_type_ind_both with 
     (P0 := fun Gamma r RS => 
@@ -830,10 +958,6 @@ Proof with eauto.
   Case "T_Abs".
     apply T_Abs... apply IHhas_type. intros y Hafi.
     unfold extend, lookup_vdecl. destruct (eq_id_dec x y)...
-  Case "T_App".
-    apply T_App with T1...
-  Case "TR_Cons".
-    apply TR_Cons...
 Qed.
 
 
