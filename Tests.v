@@ -214,6 +214,7 @@ Qed.
     I leave this as a way to deal with contexts that are not gound. *)
 (** [] *)
 
+(*
 Lemma extend_neq' : forall A (ctxt: partial_map A) x1 T2 x2 R,
   x2 <> x1 ->
   ctxt x1 = R ->
@@ -221,6 +222,7 @@ Lemma extend_neq' : forall A (ctxt: partial_map A) x1 T2 x2 R,
 Proof.
   intros. unfold extend. rewrite neq_id; auto.
 Qed.
+*)
 
 Example typing_example_2_full' :
   forall (ctxt : context),
@@ -236,7 +238,7 @@ Proof.
   apply T_Abs.
   apply T_App with (T11:=TBool). apply T_Var. apply extend_eq.
   apply T_App with TBool. apply T_Var. reflexivity. (* it DOES work. *)
-  apply T_Var. apply extend_neq'. discriminate. apply extend_eq.
+  apply T_Var. apply extend_neq. discriminate.
 Qed.
 
 

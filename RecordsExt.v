@@ -549,16 +549,30 @@ Hint Constructors step step_rcd.
 >> 
 *)
 
+Definition context := list decl.
+Definition empty := nil (A:=decl).
+Definition extend (Gamma : context) (x : id) (T : ty) := (Lv x T) :: Gamma.
 
-Definition context := partial_map ty.
+Lemma extend_eq : forall (ctxt: context) x T,
+  lookup_vdecl x (extend ctxt x T) = Some T.
+Proof.
+  intros. unfold extend, lookup_vdecl. rewrite eq_id; auto. 
+Qed.
+
+Lemma extend_neq : forall (ctxt: context) x1 x2 T,
+  x2 <> x1 ->
+  lookup_vdecl x1 (extend ctxt x2 T) = lookup_vdecl x1 ctxt.
+Proof.
+  intros. unfold extend, lookup_vdecl. rewrite neq_id; auto. 
+Qed.
 
 Reserved Notation "Gamma '|-' t '\in' T" (at level 40).
 Reserved Notation "Gamma '|-' r '*\in' Tr" (at level 40).
 
 Inductive has_type : context -> tm -> ty -> Prop :=
   | T_Var : forall Gamma x T,
-      Gamma x = Some T ->
-      Gamma |- (tvar x) \in T
+      lookup_vdecl x Gamma = Some T ->
+      Gamma |- tvar x \in T
   | T_Abs : forall Gamma x T1 T2 tb,
       (extend Gamma x T1) |- tb \in T2 -> 
       Gamma |- (tabs x T1 tb) \in (TArrow T1 T2)
@@ -651,11 +665,11 @@ Proof with eauto.
        2. t ==> t' for some t'.
      Proof: By induction on the given typing derivation. *)
   intros t T Ht.
-  remember (@empty ty) as Gamma.
+  remember (empty) as Gamma.
   generalize dependent HeqGamma.
   Ltac p_ind_tactic Ht := induction Ht using has_type_ind_both
     with (P0 := fun G tr Tr => 
-       G = \empty -> 
+       G = empty -> 
        value_rcd tr \/ (exists tr', tr *==> tr')).
   has_type_both_cases (p_ind_tactic Ht) Case; intros HeqGamma; subst.
   (* was:  has_type_cases (induction Ht) Case; intros HeqGamma; subst. *)
@@ -783,21 +797,23 @@ Hint Constructors appears_free_in appears_free_in_rcd.
 
 Lemma context_invariance : forall Gamma Gamma' t S,
      Gamma |- t \in S  ->
-     (forall x, appears_free_in x t -> Gamma x = Gamma' x)  ->
+     (forall x, appears_free_in x t -> 
+                lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
      Gamma' |- t \in S.
 Proof with eauto.
   intros. generalize dependent Gamma'.
   Ltac ci_ind_tactic H := induction H using has_type_ind_both with 
     (P0 := fun Gamma r RS => 
-      forall Gamma' : id -> option ty,
-      (forall x : id, appears_free_in_rcd x r -> Gamma x = Gamma' x) ->
+      forall Gamma' : context,
+      (forall x : id, appears_free_in_rcd x r -> 
+                      lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
       Gamma' |- r *\in RS).
   has_type_both_cases (ci_ind_tactic H) Case; intros Gamma' Heqv...
   Case "T_Var".
     apply T_Var... rewrite <- Heqv...
   Case "T_Abs".
     apply T_Abs... apply IHhas_type. intros y Hafi.
-    unfold extend. destruct (eq_id_dec x y)...
+    unfold extend, lookup_vdecl. destruct (eq_id_dec x y)...
   Case "T_App".
     apply T_App with T1...
   Case "TR_Cons".
@@ -808,19 +824,19 @@ Qed.
 Lemma free_in_context : forall x t T Gamma,
    appears_free_in x t ->
    Gamma |- t \in T ->
-   exists T', Gamma x = Some T'.
+   exists T',  lookup_vdecl x Gamma = Some T'.
 Proof with eauto.
   intros x t T Gamma Hafi Htyp.
   Ltac fic_ind_tactic H x := induction H using has_type_ind_both with 
     (P0 := fun Gamma r RS => 
       appears_free_in_rcd x r ->
       Gamma |- r *\in RS ->
-      exists T', Gamma x = Some T').
+      exists T', lookup_vdecl x Gamma = Some T').
   has_type_both_cases (fic_ind_tactic Htyp x) Case; 
     inversion Hafi; subst...
   Case "T_Abs".
     destruct IHHtyp as [T' Hctx]... exists T'.
-    unfold extend in Hctx. 
+    unfold extend, lookup_vdecl in Hctx. 
     rewrite neq_id in Hctx... 
 Qed.
 
@@ -845,7 +861,7 @@ Proof with eauto 15.
      whether it is a record term. *)
   Ltac spt_induction t x v U := induction t using tm_nest_rect with 
     (Q := fun r =>
-      forall (RT : list decl) (Gamma : partial_map ty),
+      forall (RT : list decl) (Gamma : context),
         (extend Gamma x U) |- r *\in RT -> 
         Gamma |- (subst_rcd x v r) *\in RT).
   t_both_cases (spt_induction t x v U) Case; 
@@ -867,7 +883,7 @@ Proof with eauto 15.
        [Gamma |- v : U].  We have already proven a more general version
        of this theorem, called context invariance. *)
       subst.
-      unfold extend in H1. rewrite eq_id in H1. 
+      unfold extend, lookup_vdecl in H1. rewrite eq_id in H1. 
       inversion H1; subst. clear H1.
       eapply context_invariance...
       intros x Hcontra.
@@ -876,7 +892,7 @@ Proof with eauto 15.
     SCase "x<>y".
     (* If [x <> y], then [Gamma y = Some S] and the substitution has no
        effect.  We can show that [Gamma |- y : S] by [T_Var]. *)
-      apply T_Var... unfold extend in H1. rewrite neq_id in H1...
+      apply T_Var... unfold extend, lookup_vdecl in H1. rewrite neq_id in H1...
 
   Case "tabs".
     rename x0 into y. rename T into T1.
@@ -903,7 +919,7 @@ Proof with eauto 15.
        does the latter. *)
       eapply context_invariance...
       subst.
-      intros x Hafi. unfold extend.
+      intros x Hafi. unfold extend, lookup_vdecl.
       destruct (eq_id_dec y x)...
     SCase "x<>y".
     (* If [x <> y], then the IH and context invariance allow us to show that
@@ -911,7 +927,7 @@ Proof with eauto 15.
          [Gamma,y:T11,x:U |- t : T2]      =>
          [Gamma,y:T11 |- [x:=v]t : T2] *)
       apply IHt. eapply context_invariance...
-      intros z Hafi. unfold extend.
+      intros z Hafi. unfold extend, lookup_vdecl.
       destruct (eq_id_dec y z)... 
       subst. rewrite neq_id...
 
@@ -930,14 +946,14 @@ Theorem preservation : forall t t' T,
 Proof with eauto.
   intros t t' T HT.
   (* Theorem: If [empty |- t : T] and [t ==> t'], then [empty |- t' : T]. *)
-  remember (@empty ty) as Gamma. generalize dependent HeqGamma.
+  remember (empty) as Gamma. generalize dependent HeqGamma.
   generalize dependent t'.
   (* Proof: By induction on the given typing derivation.  Many cases are
      contradictory ([T_Var], [T_Abs]) or follow directly from the IH
      ([T_RCons]).  We show just the interesting ones. *)
   Ltac pres_ind_tactic HT := induction HT using has_type_ind_both
     with (P0 := fun Gamma tr Tr => forall tr' : list def,
-       Gamma = \empty -> 
+       Gamma = empty -> 
        tr *==> tr' ->
        Gamma |- tr' *\in Tr).
   has_type_both_cases (pres_ind_tactic HT) Case;

@@ -78,11 +78,11 @@ Lemma typing_example_2 :
     \in (TArrow B B).
 Proof. 
   (* info_eauto 20 using has_type, rcd_has_type, eq_id. *)
-  eauto 20 using eq_id. 
+  eauto 20 using extend_eq. 
   (* TBD: Figure out why eauto isn't taking the hints (above and before) *)
   eapply T_App.
     eapply T_Abs. eapply T_Proj.
-      eapply T_Var.  eapply eq_id.
+      eapply T_Var.  eapply extend_eq.
       reflexivity. 
     eapply T_Rcd.
       eapply TR_Cons. eapply T_Abs. eapply T_Var. eapply extend_eq.

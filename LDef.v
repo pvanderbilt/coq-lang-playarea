@@ -1,6 +1,6 @@
 (** * LDef: Definition of an STLC-based language.  *)
 
-(** Currently, this is just Pierce's Stlc. 
+(** This is SF's Stlc with Gamma change to be a list of declarations.
 *)
 
 Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
@@ -137,9 +137,37 @@ Tactic Notation "normalize" :=
 (* ################################### *)
 (** *** Contexts *)
 
-(** Partial_map is defined in [SfLib]. *)
+Inductive decl :=
+  | Lv : id -> ty -> decl.
 
-Definition context := partial_map ty.
+Definition context := list decl.
+Definition empty := nil (A:=decl).
+Definition extend (Gamma : context) (x : id) (T : ty) := (Lv x T) :: Gamma.
+Fixpoint lookup_vdecl (x : id) (Gamma : context) := 
+  match Gamma with 
+    | nil => None 
+    | (Lv y T) :: Ls' => if eq_id_dec y x then Some T else lookup_vdecl x Ls'
+  end.
+
+Lemma extend_eq : forall (ctxt: context) x T,
+  lookup_vdecl x (extend ctxt x T) = Some T.
+Proof.
+  intros. unfold extend, lookup_vdecl. rewrite eq_id; auto. 
+Qed.
+
+Lemma extend_neq : forall (ctxt: context) x1 x2 T,
+  x2 <> x1 ->
+  lookup_vdecl x1 (extend ctxt x2 T) = lookup_vdecl x1 ctxt.
+Proof.
+  intros. unfold extend, lookup_vdecl. rewrite neq_id; auto. 
+Qed.
+
+Lemma extend_shadow : forall (ctxt: context) t1 t2 x1 x2,
+  lookup_vdecl x1 (extend (extend ctxt x2 t1) x2 t2)  
+    = lookup_vdecl x1 (extend ctxt x2 t2).
+Proof with auto.
+  intros. unfold extend, lookup_vdecl. destruct (eq_id_dec x2 x1)...
+Qed.
 
 (* ################################### *)
 (** *** Typing Relation *)
@@ -148,7 +176,7 @@ Reserved Notation "Gamma '|-' t '\in' T" (at level 40).
 
 Inductive has_type : context -> tm -> ty -> Prop :=
   | T_Var : forall Gamma x T,
-      Gamma x = Some T ->
+      lookup_vdecl x Gamma = Some T ->
       Gamma |- tvar x \in T
   | T_Abs : forall Gamma x T11 T12 t12,
       extend Gamma x T11 |- t12 \in T12 -> 

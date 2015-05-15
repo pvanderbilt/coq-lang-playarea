@@ -103,19 +103,19 @@ Lemma fake_TV_Abs:
 Proof. admit. Qed.
 
 
+(* Copies of lemmas from LEProps. *)
 
-(** ** lemmas, COPIED from LEProps1 because not in module *)
-
-Lemma ctxts_gx_then_alookup : 
+Lemma ctxts_agree_on_lookup : 
   forall (x : id) (G : context) (g : rctx) (T : ty),
     g  :::* G -> 
-    G x = Some T ->
+    lookup_vdecl x G = Some T ->
       exists v, alookup x g = Some v /\ v ::: T.
 Proof.
   introv Hctxts HGxT. induction Hctxts.
     Case "TC_nil". inversion HGxT.
-    Case "TC_cons". unfold extend in HGxT. destruct (eq_id_dec x0 x).
-      SCase "x=x0". inversion HGxT; subst; clear HGxT. exists v. split.
+    Case "TC_cons". unfold lookup_vdecl, extend in HGxT. 
+    destruct (eq_id_dec x0 x).
+      SCase "x0=x". subst. inverts HGxT. exists v. split.
         simpl. apply eq_id.
         assumption.
       SCase "x0<>x". apply IHHctxts in HGxT. clear IHHctxts.
@@ -124,15 +124,16 @@ Proof.
           assumption.
 Qed.
 
+
 Lemma ctx_tvar_then_some : forall G x T,
-  G |- (tvar x) \in T -> G x = Some T.
+  G |- (tvar x) \in T -> lookup_vdecl x G = Some T.
 Proof. introv H. inversion H. auto. Qed.
 
 Lemma ctx_tvar_then_alookup : forall G x T g,
   G |- (tvar x) \in T -> g :::* G -> 
     exists v, alookup x g = Some v /\ v ::: T.
 Proof. 
-  introv HG Hg. apply (ctxts_gx_then_alookup x G g T Hg). 
+  introv HG Hg. apply (ctxts_agree_on_lookup x G g T Hg). 
   apply ctx_tvar_then_some. assumption. 
 Qed.
 

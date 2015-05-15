@@ -96,7 +96,7 @@ Theorem progress : forall t T,
 
 Proof with eauto.
   intros t T Ht.
-  remember (@empty ty) as Gamma.
+  remember (empty) as Gamma.
   has_type_cases (induction Ht) Case; subst Gamma...
   Case "T_Var".
     (* contradictory: variables cannot be typed in an 
@@ -222,9 +222,7 @@ Definition closed (t:tm) :=
 Lemma free_in_context : forall x t T Gamma,
    appears_free_in x t ->
    Gamma |- t \in T ->
-   exists T', Gamma x = Some T'.
-
-
+   exists T', lookup_vdecl x Gamma = Some T'.
 Proof.
   intros x t T Gamma H H0. generalize dependent Gamma. 
   generalize dependent T. 
@@ -252,7 +250,8 @@ Qed.
 
 Lemma context_invariance : forall Gamma Gamma' t T,
      Gamma |- t \in T  ->
-     (forall x, appears_free_in x t -> Gamma x = Gamma' x) ->
+     (forall x, appears_free_in x t -> 
+                lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
      Gamma' |- t \in T.
 
 Proof with eauto.
@@ -266,7 +265,7 @@ Proof with eauto.
     apply IHhas_type. intros x1 Hafi.
     (* the only tricky step... the [Gamma'] we use to 
        instantiate is [extend Gamma x T11] *)
-    unfold extend. destruct (eq_id_dec x x1)... 
+    unfold extend, lookup_vdecl. destruct (eq_id_dec x x1)... 
   Case "T_App".
     apply T_App with T11...  
 Qed.
@@ -314,11 +313,11 @@ Proof with eauto.
     SCase "x=y".
       eapply context_invariance...
       subst.
-      intros x Hafi. unfold extend.
+      intros x Hafi. unfold extend, lookup_vdecl.
       destruct (eq_id_dec y x)...
     SCase "x<>y".
       apply IHt. eapply context_invariance...
-      intros z Hafi. unfold extend.
+      intros z Hafi. unfold extend, lookup_vdecl.
       destruct (eq_id_dec y z)...
       subst. rewrite neq_id... 
 Qed.
@@ -347,7 +346,7 @@ Theorem preservation : forall t t' T,
      empty |- t' \in T.
 
 Proof with eauto.
-  remember (@empty ty) as Gamma.
+  remember (empty) as Gamma.
   intros t t' T HT. generalize dependent t'.  
       (* playing around:
         has_type_cases (induction HT) Case. admit. admit. admit.  admit. admit. 
