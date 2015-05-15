@@ -69,7 +69,7 @@ Notation "t '/' g '=>:' T" := (evaluates_to_a t g T)
 Inductive rtcontext_has_type: rctx -> context -> Prop :=
   | TC_nil : nil :::* empty
   | TC_cons : forall G g x v T, 
-                g :::* G -> v ::: T -> (aextend x v g) :::* extend G x T
+                g :::* G -> v ::: T -> (aextend x v g) :::* (add_vdecl x T G)
 where "g ':::*' G" := (rtcontext_has_type g G).
 
 Hint Unfold value_has_type result_ok evaluates_to_a. 
@@ -115,7 +115,7 @@ Lemma ctxts_agree_on_lookup :
 Proof.
   introv Hctxts HGxT. induction Hctxts.
     Case "TC_nil". inversion HGxT.
-    Case "TC_cons". unfold lookup_vdecl, extend in HGxT. 
+    Case "TC_cons". unfold lookup_vdecl, add_vdecl in HGxT. 
     destruct (eq_id_dec x0 x).
       SCase "x0=x". subst. inverts HGxT. exists v. split.
         simpl. apply eq_id.

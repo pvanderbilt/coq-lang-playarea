@@ -231,7 +231,7 @@ Proof.
   Case "afi_abs".
     inversion H1; subst.
     apply IHappears_free_in in H7.
-    rewrite extend_neq in H7; assumption.
+    rewrite lookup_add_vdecl_neq in H7; assumption.
 Qed.
 
 (** Next, we'll need the fact that any term [t] which is well typed in
@@ -265,7 +265,7 @@ Proof with eauto.
     apply IHhas_type. intros x1 Hafi.
     (* the only tricky step... the [Gamma'] we use to 
        instantiate is [extend Gamma x T11] *)
-    unfold extend, lookup_vdecl. destruct (eq_id_dec x x1)... 
+    unfold add_vdecl, lookup_vdecl. destruct (eq_id_dec x x1)... 
   Case "T_App".
     apply T_App with T11...  
 Qed.
@@ -275,7 +275,7 @@ Qed.
     [x:=v]t \in T]. *)
 
 Lemma substitution_preserves_typing : forall Gamma x U t v T,
-     extend Gamma x U |- t \in T ->
+     add_vdecl x U Gamma |- t \in T ->
      empty |- v \in U   ->
      Gamma |- [x:=v]t \in T.
 
@@ -299,25 +299,25 @@ Proof with eauto.
     rename i into y. destruct (eq_id_dec x y).
     SCase "x=y".
       subst. 
-      rewrite extend_eq in H2.
+      rewrite lookup_add_vdecl_eq in H2.
       inversion H2; subst. clear H2.
       eapply context_invariance... intros x Hcontra.
       (* added Ht' & removed .. *)
       destruct (free_in_context _ _ T empty Hcontra Ht') as [T' HT']. 
       inversion HT'.
     SCase "x<>y".
-      apply T_Var. rewrite extend_neq in H2... 
+      apply T_Var. rewrite lookup_add_vdecl_neq in H2... 
   Case "tabs".
     rename i into y. apply T_Abs.
     destruct (eq_id_dec x y).
     SCase "x=y".
       eapply context_invariance...
       subst.
-      intros x Hafi. unfold extend, lookup_vdecl.
+      intros x Hafi. unfold add_vdecl, lookup_vdecl.
       destruct (eq_id_dec y x)...
     SCase "x<>y".
       apply IHt. eapply context_invariance...
-      intros z Hafi. unfold extend, lookup_vdecl.
+      intros z Hafi. unfold add_vdecl, lookup_vdecl.
       destruct (eq_id_dec y z)...
       subst. rewrite neq_id... 
 Qed.

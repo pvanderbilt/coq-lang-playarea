@@ -61,8 +61,8 @@ Definition substf_ok (sfunc:  id -> tm -> tm -> tm) :=
 Example subst_ok :substf_ok subst.
 Proof. unfold substf_ok. repeat split. Qed.
 
-Notation "Ls ';;;' x '\in' T" := (push_vdecl x T Ls) (at level 40).
-Notation "Fs ';;;' x = t"     := (push_vdef x t Fs) (at level 40).
+Notation "Ls ';;;' x '\in' T" := (add_vdecl x T Ls) (at level 40).
+Notation "Fs ';;;' x = t"     := (add_vdef x t Fs) (at level 40).
 
 Example er2a : exists (t:ty), t = 
   TRcd (nil ;;; i1 \in (TArrow A B) ;;; i2 \in A).

@@ -142,31 +142,49 @@ Inductive decl :=
 
 Definition context := list decl.
 Definition empty := nil (A:=decl).
-Definition extend (Gamma : context) (x : id) (T : ty) := (Lv x T) :: Gamma.
+Definition add_vdecl(x : id) (T : ty)  (Gamma : context) 
+  := (Lv x T) :: Gamma.
 Fixpoint lookup_vdecl (x : id) (Gamma : context) := 
   match Gamma with 
     | nil => None 
     | (Lv y T) :: Ls' => if eq_id_dec y x then Some T else lookup_vdecl x Ls'
   end.
 
-Lemma extend_eq : forall (ctxt: context) x T,
-  lookup_vdecl x (extend ctxt x T) = Some T.
+Lemma lookup_add_vdecl_eq : 
+  forall (x : id) (T : ty) (Ls : list decl),
+    lookup_vdecl x (add_vdecl x T Ls) = Some T.
 Proof.
-  intros. unfold extend, lookup_vdecl. rewrite eq_id; auto. 
+  intros. simpl. apply eq_id.
 Qed.
 
-Lemma extend_neq : forall (ctxt: context) x1 x2 T,
+Lemma lookup_add_vdecl_neq :
+  forall (x y : id) (T : ty) (Ls : list decl),
+    y <> x ->
+    lookup_vdecl x (add_vdecl y T Ls) = lookup_vdecl x Ls.
+Proof.
+  intros. simpl. apply neq_id. apply H.
+Qed.
+
+(*
+Lemma add_vdecl_eq : forall (ctxt: context) x T,
+  lookup_vdecl x (add_vdecl ctxt x T) = Some T.
+Proof.
+  intros. unfold add_vdecl, lookup_vdecl. rewrite eq_id; auto. 
+Qed.
+
+Lemma add_vdecl_neq : forall (ctxt: context) x1 x2 T,
   x2 <> x1 ->
-  lookup_vdecl x1 (extend ctxt x2 T) = lookup_vdecl x1 ctxt.
+  lookup_vdecl x1 (add_vdecl ctxt x2 T) = lookup_vdecl x1 ctxt.
 Proof.
-  intros. unfold extend, lookup_vdecl. rewrite neq_id; auto. 
+  intros. unfold add_vdecl, lookup_vdecl. rewrite neq_id; auto. 
 Qed.
+*)
 
-Lemma extend_shadow : forall (ctxt: context) t1 t2 x1 x2,
-  lookup_vdecl x1 (extend (extend ctxt x2 t1) x2 t2)  
-    = lookup_vdecl x1 (extend ctxt x2 t2).
+Lemma lookup_add_vdecl_shadow : forall (ctxt: context) t1 t2 x1 x2,
+  lookup_vdecl x1 (add_vdecl x2 t2 (add_vdecl x2 t1 ctxt))  
+    = lookup_vdecl x1 (add_vdecl x2 t2 ctxt).
 Proof with auto.
-  intros. unfold extend, lookup_vdecl. destruct (eq_id_dec x2 x1)...
+  intros. unfold add_vdecl, lookup_vdecl. destruct (eq_id_dec x2 x1)...
 Qed.
 
 (* ################################### *)
@@ -179,7 +197,7 @@ Inductive has_type : context -> tm -> ty -> Prop :=
       lookup_vdecl x Gamma = Some T ->
       Gamma |- tvar x \in T
   | T_Abs : forall Gamma x T11 T12 t12,
-      extend Gamma x T11 |- t12 \in T12 -> 
+      add_vdecl x T11 Gamma |- t12 \in T12 -> 
       Gamma |- tabs x T11 t12 \in TArrow T11 T12
   | T_App : forall T11 T12 Gamma t1 t2,
       Gamma |- t1 \in TArrow T11 T12 -> 

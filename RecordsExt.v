@@ -67,8 +67,8 @@ Tactic Notation "t_cases" tactic(first) ident(c) :=
 
 (* *** Functions for dealing with def and decl- lists *)
 
-Definition push_vdef x t Fs := (Fv x t) :: Fs.
-Definition push_vdecl x T Ls := (Lv x T) :: Ls.
+Definition add_vdef x t Fs := (Fv x t) :: Fs.
+Definition add_vdecl x T Ls := (Lv x T) :: Ls.
 
 Fixpoint lookup_vdef x Fs := 
   match Fs with 
@@ -83,32 +83,32 @@ Fixpoint lookup_vdecl x Ls :=
     | (Lv y T) :: Ls' => if eq_id_dec y x then Some T else lookup_vdecl x Ls'
   end.
 
-Lemma lookup_push_vdef_eq : 
+Lemma lookup_add_vdef_eq : 
   forall (x : id) (t : tm) (Fs : list def),
-    lookup_vdef x (push_vdef x t Fs) = Some t.
+    lookup_vdef x (add_vdef x t Fs) = Some t.
 Proof.
   intros. simpl. apply eq_id.
 Qed.
 
-Lemma lookup_push_vdef_neq :
+Lemma lookup_add_vdef_neq :
   forall (x y : id) (t : tm) (Fs : list def),
     y <> x ->
-    lookup_vdef x (push_vdef y t Fs) = lookup_vdef x Fs.
+    lookup_vdef x (add_vdef y t Fs) = lookup_vdef x Fs.
 Proof.
   intros. simpl. apply neq_id. apply H.
 Qed.
 
-Lemma lookup_push_vdecl_eq : 
+Lemma lookup_add_vdecl_eq : 
   forall (x : id) (T : ty) (Ls : list decl),
-    lookup_vdecl x (push_vdecl x T Ls) = Some T.
+    lookup_vdecl x (add_vdecl x T Ls) = Some T.
 Proof.
   intros. simpl. apply eq_id.
 Qed.
 
-Lemma lookup_push_vdecl_neq :
+Lemma lookup_add_vdecl_neq :
   forall (x y : id) (T : ty) (Ls : list decl),
     y <> x ->
-    lookup_vdecl x (push_vdecl y T Ls) = lookup_vdecl x Ls.
+    lookup_vdecl x (add_vdecl y T Ls) = lookup_vdecl x Ls.
 Proof.
   intros. simpl. apply neq_id. apply H.
 Qed.
@@ -463,7 +463,7 @@ with value_rcd : (list def) -> Prop :=
   | vr_cons : forall x v1 vr,
       value v1 ->
       value_rcd vr ->
-      value_rcd (push_vdef x v1 vr).
+      value_rcd (add_vdef x v1 vr).
 
 Hint Constructors value value_rcd.
 
@@ -511,11 +511,11 @@ Inductive step : tm -> tm -> Prop :=
 with step_rcd : (list def) -> (list def) -> Prop := 
   | STR_Head : forall x t t' rb,
         t ==> t' ->
-        (push_vdef x t rb) *==> (push_vdef x t' rb)
+        (add_vdef x t rb) *==> (add_vdef x t' rb)
   | STR_Tail : forall x v rb rb',
         value v ->
         rb *==> rb' ->
-        (push_vdef x v rb) *==> (push_vdef x v rb')
+        (add_vdef x v rb) *==> (add_vdef x v rb')
 
 where "t1 '==>' t2" := (step t1 t2)
 and "rb1 '*==>' rb2" := (step_rcd rb1 rb2).
@@ -595,7 +595,7 @@ with rcd_has_type : context -> (list def) -> (list decl) -> Prop :=
   | TR_Cons : forall Gamma x t T tr Tr,
       Gamma |- t \in T ->
       Gamma |- tr *\in Tr ->
-      Gamma |- (push_vdef x t tr) *\in (push_vdecl x T Tr)
+      Gamma |- (add_vdef x t tr) *\in (add_vdecl x T Tr)
 
 where "Gamma '|-' t '\in' T" := (has_type Gamma t T)
 and   "Gamma '|-' r '*\in' Tr" := (rcd_has_type Gamma r Tr).
@@ -641,15 +641,15 @@ Proof.
   Case "cons".
     destruct (eq_id_dec y x).
       SCase "x=y". subst. 
-        rewrite (lookup_push_vdecl_eq x Ty Trb') in Hl. inverts Hl.
+        rewrite (lookup_add_vdecl_eq x Ty Trb') in Hl. inverts Hl.
         exists vy. split.
-          apply lookup_push_vdef_eq.
+          apply lookup_add_vdef_eq.
           apply Hty.
       SCase "y<>x".
-        rewrite (lookup_push_vdecl_neq _ _ Ty Trb' n) in Hl. 
+        rewrite (lookup_add_vdecl_neq _ _ Ty Trb' n) in Hl. 
         destruct (IHHt Hl) as [vx [Hlx HTx]]; clear IHHt.
         exists vx. split.
-          rewrite (lookup_push_vdef_neq _ _ _ _ n). apply Hlx.
+          rewrite (lookup_add_vdef_neq _ _ _ _ n). apply Hlx.
           apply HTx.
 Qed.
 
@@ -788,10 +788,10 @@ Inductive appears_free_in : id -> tm -> Prop :=
 with appears_free_in_rcd : id -> (list def) -> Prop :=
   | afi_rhead : forall x i ti r',
       appears_free_in x ti ->
-      appears_free_in_rcd x (push_vdef i ti r')
+      appears_free_in_rcd x (add_vdef i ti r')
   | afi_rtail : forall x i ti r',
       appears_free_in_rcd x r' ->
-      appears_free_in_rcd x (push_vdef i ti r').
+      appears_free_in_rcd x (add_vdef i ti r').
 
 Hint Constructors appears_free_in appears_free_in_rcd.
 

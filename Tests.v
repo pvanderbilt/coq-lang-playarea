@@ -184,7 +184,7 @@ Example typing_example_2 :
        (tabs y (TArrow TBool TBool)
           (tapp (tvar y) (tapp (tvar y) (tvar x))))) \in
     (TArrow TBool (TArrow (TArrow TBool TBool) TBool)).
-Proof with auto using extend_eq.
+Proof with auto using lookup_add_vdecl_eq.
   apply T_Abs.
   apply T_Abs.
   eapply T_App. apply T_Var...
@@ -205,11 +205,11 @@ Proof.
   (* FILLED IN *)
   apply T_Abs.
   apply T_Abs.
-  apply T_App with (T11:=TBool). apply T_Var. apply extend_eq.
-  apply T_App with TBool. apply T_Var. apply extend_eq.
-  apply T_Var. apply extend_neq. unfold not. intro HP. inversion HP. 
+  apply T_App with (T11:=TBool). apply T_Var. apply lookup_add_vdecl_eq.
+  apply T_App with TBool. apply T_Var. apply lookup_add_vdecl_eq.
+  apply T_Var. apply lookup_add_vdecl_neq. unfold not. intro HP. inversion HP. 
 Qed.
-(* Why is not "apply extend_eq" needed in the last line? *)
+(* Why is not "apply lookup_add_vdecl_eq" needed in the last line? *)
 (* As discovered below, "reflexivity" can be used after "apply T_Var".  
     I leave this as a way to deal with contexts that are not gound. *)
 (** [] *)
@@ -236,9 +236,9 @@ Proof.
   intro.
   apply T_Abs.
   apply T_Abs.
-  apply T_App with (T11:=TBool). apply T_Var. apply extend_eq.
+  apply T_App with (T11:=TBool). apply T_Var. apply lookup_add_vdecl_eq.
   apply T_App with TBool. apply T_Var. reflexivity. (* it DOES work. *)
-  apply T_Var. apply extend_neq. discriminate.
+  apply T_Var. apply lookup_add_vdecl_neq. discriminate.
 Qed.
 
 
@@ -293,7 +293,7 @@ Proof.
   inversion H4. subst. clear H4.
   inversion H2. subst. clear H2.
   inversion H5. subst. clear H5.
-  (* rewrite extend_neq in H1. rewrite extend_eq in H1. *)
+  (* rewrite lookup_add_vdecl_neq in H1. rewrite lookup_add_vdecl_eq in H1. *)
   inversion H1.  Qed.
 
 (** (Exercie) Another nonexample:
