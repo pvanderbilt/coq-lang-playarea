@@ -1,13 +1,13 @@
 (** * RecordsExt: Adding Records to STLC *)
 
 (** This file started out as SF's Records.v but has been modified to 
-    have records as association lists. *)
+    have records as lists of declarations. 
+    This is in contrast to SF's approach. *)
 
 Add LoadPath "/Users/pv/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-(* Require Export Stlc. *)
 Require Export Common LDef.
 Import P3Common.
 Import LDEF.
@@ -20,7 +20,9 @@ Module Records.
 
 (**  *** Types [ty]
 <<
-           | ...
+           | X                           base type X
+           | Bool                        boolean type (* not here *)
+           | T1 -> T2                    function type
            | {i1:T1, ..., in:Tn}         record type
 >> 
  *)
@@ -36,17 +38,29 @@ Tactic Notation "T_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "TBase" | Case_aux c "TArrow" | Case_aux c "TRcd" ].
 
-(** In SF there is a note here about how this doesn't give the 
-    induction principle we want.
-    Here we do it this way and fix the induction principle. *)
+(** In SF there is a note about how something like this doesn't 
+    give a useful induction principle we want.  So they have
+    the following:
+<<
+      | TRNil : ty
+      | TRCons : id -> ty -> ty -> ty
+>>
+    Since this allows TRCons to be applied to non-record components,
+    they have a way to tell whether types are well-formed.  The same
+    thing applies to terms.
+
+    Instead, we use lists of declarations and fix the induction 
+    principle.  Similarly, record terms will be lists of definitions.
+*)
 
 (** *** Terms [tm]
 <<
        t ::=                          Terms:
-           | ...
+           | x                           variable
+           | t1 t2                       application
+           | lambda x. t                 abstraction
            | {i1=t1, ..., in=tn}         record 
            | t.i                         projection
-
 >> 
 The last two clauses were added. *)
 
@@ -54,15 +68,15 @@ Inductive tm : Type :=
   | tvar  : id -> tm
   | tapp  : tm -> tm -> tm
   | tabs  : id -> ty -> tm -> tm
-  | tproj : tm -> id -> tm
   | trcd  : list def -> tm
+  | tproj : tm -> id -> tm
 with def : Type :=
   | Fv    : id -> tm -> def.
 
 Tactic Notation "t_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
-  | Case_aux c "tproj" | Case_aux c "trcd"  ].
+  | Case_aux c "trcd" | Case_aux c "tproj"  ].
 
 
 (* *** Functions for dealing with def and decl- lists *)
@@ -73,14 +87,16 @@ Definition add_vdecl x T Ls := (Lv x T) :: Ls.
 Fixpoint lookup_vdef x Fs := 
   match Fs with 
     | nil => None 
-    | (Fv y t) :: Fs' => if eq_id_dec y x then Some t else lookup_vdef x Fs'
+    | (Fv y t) :: Fs' => 
+        if eq_id_dec y x then Some t else lookup_vdef x Fs'
     (* | _ :: Fs' => lookup_vdef x Fs' *)
   end.
 
 Fixpoint lookup_vdecl x Ls := 
   match Ls with 
     | nil => None 
-    | (Lv y T) :: Ls' => if eq_id_dec y x then Some T else lookup_vdecl x Ls'
+    | (Lv y T) :: Ls' => 
+        if eq_id_dec y x then Some T else lookup_vdecl x Ls'
   end.
 
 Lemma lookup_add_vdef_eq : 
@@ -167,7 +183,7 @@ Definition lookup_vdef := lookup_gen unapply_vdef.
 >>
 
     The following custom recursion function replaces the last case 
-    (a proof of [P (TRcd r)] given only that [r : aliast ty])
+    (a proof of [P (TRcd r)] given only that [r : list decl])
     with four:
       - an additional proposition function [Q] over [list decl] (at the top),
       - a proof that for record body type, [Trb], [Q Trb] implies [P (TRcd Trb)],
@@ -175,7 +191,7 @@ Definition lookup_vdef := lookup_gen unapply_vdef.
       - a proof that [P T] and [Q Trb] implies [Q (cons x T Trb))]
 
     The definition may be a little hard to follow, as it is using the 
-    coq-generated [ty_rect] and [alist_rect].  
+    coq-generated [ty_rect] and [list_rect].  
     The primed version should be the same thing using match expressions.
 *)
 
@@ -278,22 +294,22 @@ Definition tm_nest_rect
     (fvar : forall x : id, P (tvar x))
     (fapp : forall t1 : tm, P t1 -> forall t2 : tm, P t2 -> P (tapp t1 t2))
     (fabs : forall (x : id) (T : ty) (t : tm), P t -> P (tabs x T t))
-    (fproj : forall t : tm, P t -> forall x : id, P (tproj t x))
     (frcd' : forall rb : list def, Q rb -> P (trcd rb))
       (frcd_nil' : Q nil)
-      (frcd_cons' : forall (x : id) (t : tm) (rb : list def), 
+      (frcd_cons' : forall (x : id) (t : tm) (rb : list def),
                       P t -> Q rb -> Q ((Fv x t) :: rb))
+    (fproj : forall t : tm, P t -> forall x : id, P (tproj t x)) 
   : forall t : tm, P t
   := fix F (t : tm) : P t := 
     let frcd_cons bxt rb := match bxt with (Fv x t) => frcd_cons' x t rb (F t) end
     in let frcd rb := frcd' rb (list_rect Q frcd_nil' frcd_cons rb)
-    in tm_rect P fvar fapp fabs fproj frcd t.
+    in tm_rect P fvar fapp fabs frcd fproj t.
 
 Tactic Notation "t_both_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
-  | Case_aux c "tproj" | Case_aux c "trcd" 
-  | Case_aux c "trnil" | Case_aux c "trcons"  ].
+  | Case_aux c "trcd" | Case_aux c "trnil" | Case_aux c "trcons"
+  | Case_aux c "tproj" ].
 
 
 
@@ -317,8 +333,8 @@ Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
     | tvar y => if eq_id_dec x y then s else t
     | tabs y T t1 =>  tabs y T (if eq_id_dec x y then t1 else (subst x s t1))
     | tapp t1 t2 => tapp (subst x s t1) (subst x s t2)
-    | tproj t1 i => tproj (subst x s t1) i
     | trcd r => trcd (rsubst r)
+    | tproj t1 i => tproj (subst x s t1) i
   end.
 
 Notation "'[' x ':=' s ']' t" := (subst x s t) (at level 20).
@@ -361,11 +377,11 @@ Definition subst_ugly (x:id) (s:tm) :tm -> tm :=
     (fun y => if eq_id_dec x y then s else (tvar y))                  (* tvar y *)
     (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                               (* tapp t1 t2 *)
     (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1)) (* tabs y T t1 *)
-    (fun t1 mt1 i => tproj mt1 i)                                     (* tproj t1 i *)
     (fun r mr => trcd mr)                                             (* trcd r *)
       (nil)                                                           (* r=nil *)
-      (fun i t r mt mr => (Fv i mt) :: mr).                           (* r=cons i t r *)
-
+      (fun i t r mt mr => (Fv i mt) :: mr)                            (* r=cons i t r *)
+    (fun t1 mt1 i => tproj mt1 i)                                     (* tproj t1 i *)
+    .
 
 (*
 Definition tm_rect_nest (P: tm -> Type) (Q: list def -> Type)
@@ -405,8 +421,8 @@ Definition tm_rect_nest_map
   (fabs : id -> ty ->  tm -> tm -> tm)
   (fproj : tm -> tm -> id -> tm)
  := tm_nest_rect
-      (fun _ => tm)  (fun _ => list def) fvar fapp fabs fproj
-      (fun r mr => trcd mr) nil (fun i t r mt mr => (Fv i mt) :: mr).
+      (fun _ => tm)  (fun _ => list def) fvar fapp fabs
+      (fun r mr => trcd mr) nil (fun i t r mt mr => (Fv i mt) :: mr) fproj.
 
 
 Definition subst'' (x:id) (s:tm) :tm -> tm := 
@@ -426,10 +442,10 @@ Definition tm_id (t : tm) : tm :=
     (fun y => tvar y)
     (fun  t1 mt1 t2 mt2 => tapp mt1 mt2)
     (fun y T t1 mt1 =>  tabs y T t1)
-    (fun  t1 mt1 i => tproj mt1 i)
     (fun r mr => trcd mr)
     (nil)
     (fun i t r mt mr => (Fv i mt) :: mr)
+    (fun  t1 mt1 i => tproj mt1 i)
     t.
 (*
 Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
