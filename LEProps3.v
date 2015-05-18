@@ -10,8 +10,8 @@ Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export Common LDef LEval.
-Import P3Common LDEF LEVAL.
+Require Export Common RecordsExt LEval.
+Import P3Common Records LEVAL.
 
 Module LEProps3.
 
@@ -191,7 +191,15 @@ Theorem evalF_soundness :
     G |- t \in T ->  g :::* G -> t / g  =>: T.
 Proof.
   (* introv Hty HGg. generalize dependent G. generalize dependent g. generalize dependent T. *)
-  t_cases (induction t as [ x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) Case; introv Hty HGg.
+  t_cases (induction t as [ | | x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) Case; introv Hty HGg.
+
+  Case "ttrue".
+    inverts Hty.
+    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. apply TR_Norm. apply TV_True.
+
+  Case "tfalse".
+    inverts Hty.
+    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. auto.
 
   Case "tvar". apply (ctx_tvar_then_evalsto G x T g Hty HGg).
 
@@ -202,7 +210,7 @@ Proof.
     assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
     assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
     (* use the [let_val] lemmas with Ht1 and Ht2 to decompose the two LETRT forms *)
-    apply (let_val t1 g n' _ _ (TArrow T11 T) T Hev Ht1). clear Hev Ht1. 
+    apply (let_val t1 g n' _ _ (TArrow T1 T) T Hev Ht1). clear Hev Ht1. 
     intros v1 er1 Hv1 Hv1t erL2 HevL2.
     apply (let_val t2 g n' _ _ _ _ HevL2 Ht2). clear HevL2 Ht2.
     intros v2 er2 Hv2 Hv2t erf Hevf.
@@ -227,13 +235,11 @@ Proof.
     apply (IHtb _ _ _ H4). apply (TC_cons _ _ _ va _ HGg Hva).
     (* apply (fun va Hva => IHtb _ _ _ H4 (TC_cons _ _ _ va _ HGg Hva)). *)
 
-  Case "ttrue".
-    inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. apply TR_Norm. apply TV_True.
+  Case "trcd".
+    admit. (* TBD *)
 
-  Case "tfalse".
-    inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. auto.
+  Case "tproj".
+    admit. (* TBD *)
 
   Case "tif".
     inverts Hty.

@@ -8,8 +8,8 @@ Add LoadPath  "~/Polya/coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export Common LEval.
-Import P3Common LDEF LEVAL.
+Require Export Common RecordsExt LEval.
+Import P3Common Records LEVAL.
 
 (* ###################################################################### *)
 (** ** Some definitions to use in testing *)
@@ -169,4 +169,39 @@ Example e_bind_test2 :
     vtrue.
 Proof. reflexivity. Qed.
 
+(* Tests of Records *)
 
+Definition i1 := Id (21).
+Definition i2 := Id (22).
+
+Example e_rcd0 :
+  evalF_yields_v (trcd []) (vrcd []).
+Proof. reflexivity. Qed.
+
+
+Definition rcd1 := (trcd [
+    (Fv i1 (tabs id_x TBool (tvar id_x))); 
+    (Fv i2 (tabs id_x TBool (tvar id_x)))
+    ]).
+
+Example e_rcd1 :
+  evalF_yields_v 
+    rcd1
+    (vrcd (aextend i1 (vabs id_x (tvar id_x) rctx0)
+          (aextend i2 (vabs id_x (tvar id_x) rctx0) []))).
+Proof. reflexivity. Qed.
+
+Example e_rcd1p :
+  evalF_yields_v 
+    (tproj rcd1 i1) 
+    (vabs id_x (tvar id_x) rctx0).
+Proof. reflexivity. Qed.
+
+(* Turn this into a way to explore what EvalF does.
+Example e_rcd1' :
+
+  exists v, evalF rcd1 rctx0 10 = efr_normal v.
+Proof.
+  eexists. simpl. reflexivity.
+Qed.
+*)

@@ -7,8 +7,8 @@ Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export Common LDef.
-Import P3Common LDEF.
+Require Export Common RecordsExt.
+Import P3Common Records.
 
 Module LEVAL.
 
@@ -18,14 +18,16 @@ Module LEVAL.
 Inductive evalue : Type :=
   | vabs : id -> tm -> (alist evalue) -> evalue
   | vtrue : evalue
-  | vfalse : evalue.
+  | vfalse : evalue
+  | vrcd : (alist evalue) -> evalue.
 
 (* ###################################################################### *)
 (**  ** The [eval] relation for big-step semantics *)
 
 Definition rctx := alist evalue.
 
-Reserved Notation "t '/' g '||' v" (at level 40, g at level 39).
+Reserved Notation "t '/' c '||' v" (at level 40, c at level 39).
+Reserved Notation "Fs '/' c '>>*' bs" (at level 40, c at level 39).
 
 Inductive eval : tm -> rctx -> evalue -> Prop :=
   | E_Var : forall x c v,
@@ -38,6 +40,13 @@ Inductive eval : tm -> rctx -> evalue -> Prop :=
       t2 / c || v2 ->
       apply v1 v2 v ->
         tapp t1 t2 / c || v
+  | E_Rcd : forall Fs c bs, 
+      Fs / c >>* bs -> 
+        (trcd Fs) / c || (vrcd bs)
+  | E_Proj : forall t c bs x v, 
+     t / c || (vrcd bs) -> 
+     alookup x bs = Some v -> 
+       (tproj t x) / c || v
   | E_True : forall c,
         ttrue / c || vtrue
   | E_False : forall c,
@@ -49,31 +58,60 @@ Inductive eval : tm -> rctx -> evalue -> Prop :=
 
 with apply : evalue -> evalue -> evalue -> Prop :=
   | EA : forall xf tf cf va vr,
-      tf / (aextend xf va cf) || vr -> apply (vabs xf tf cf) va vr
+      tf / (aextend xf va cf) || vr -> 
+        apply (vabs xf tf cf) va vr
 
 with eval_bool : evalue -> tm -> tm -> rctx -> evalue -> Prop :=
-  | EB_true : forall tt te c v, tt / c || v -> eval_bool vtrue tt te c v
-  | EB_false : forall tt te c v, te / c || v -> eval_bool vfalse tt te c v
+  | EB_true : forall tt te c v, 
+      tt / c || v -> 
+        eval_bool vtrue tt te c v
+  | EB_false : forall tt te c v, 
+      te / c || v -> 
+        eval_bool vfalse tt te c v
 
-where "t '/' g '||' v" := (eval t g v) : type_scope.
+with exec_list : list def -> rctx -> alist evalue -> Prop :=
+  | EL_Nil : forall c,
+        nil / c >>* nil
+  | EL_Cons : forall t1 c v1 Fs' bs' x1,
+      t1 / c || v1 ->
+      Fs' / c >>* bs' ->
+        (add_vdef x1 t1 Fs') / c >>* (aextend x1 v1 bs')
+
+where "t '/' c '||' v" := (eval t c v) : type_scope
+and  "Fs '/' c '>>*' bs" := (exec_list Fs c bs) : type_scope.
 
 Tactic Notation "eval_cases" tactic(first) ident(c) :=
   first;
-  [ Case_aux c "E_Var" | Case_aux c "E_Abs"  | Case_aux c "E_App"  
+  [ Case_aux c "E_Var" | Case_aux c "E_Abs"  | Case_aux c "E_App" 
+  | Case_aux c "E_Rcd" | Case_aux c "E_Proj"
   | Case_aux c "E_True" | Case_aux c "E_False"  | Case_aux c "E_If"  ].
-    (* | Case_aux c "E_If_True"  | Case_aux c "E_If_False" *)
 
-Hint Constructors eval apply eval_bool.
+Hint Constructors eval apply eval_bool exec_list.
 
 (* ###################################################################### *)
 (**  ** The evalF function for big-step semantics *)
 
-(** *** Return type *)
+(** *** Return types *)
 
+Inductive ef_return_g {Tr : Type} :  Type :=
+  | efr_normal : Tr -> ef_return_g
+  | efr_nogas : ef_return_g
+  | efr_stuck : ef_return_g .
+
+Definition ef_return := ef_return_g (Tr := evalue).
+Definition xf_return := ef_return_g (Tr := alist evalue).
+
+(*
 Inductive ef_return : Type :=
   | efr_normal : evalue -> ef_return
   | efr_nogas : ef_return
   | efr_stuck : ef_return .
+
+Inductive xf_return : Type :=
+  | xfr_normal : alist evalue -> xf_return
+  | xfr_nogas : xf_return
+  | xfr_stuck : xf_return .
+*)
 
 (** *** [LETRT] notation *)
 
@@ -91,20 +129,39 @@ Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
   match gas with
     | O => efr_nogas
     | S gas' => 
-      match t with
+      let fix execF_list (Fs : list def) : xf_return :=
+        match Fs with
+          | nil => efr_normal nil
+          | (Fv x t) :: Fs' =>
+              LETRT v <== evalF t g gas' IN
+                LETRT bs' <== execF_list Fs' IN 
+                  efr_normal (aextend x v bs')
+        end
+      in match t with
         | tvar x => 
-          match alookup x g with 
-            | Some v => efr_normal v 
-            | None => efr_stuck 
-          end
+            match alookup x g with 
+              | Some v => efr_normal v 
+              | None => efr_stuck 
+            end
+        | tabs x T t => efr_normal (vabs x t g)
         | tapp t1 t2 =>
             LETRT v1 <== evalF t1 g gas' IN
               LETRT v2 <== evalF t2 g gas' IN
                 match v1 with 
-                  | vabs tx tf te => evalF tf (aextend tx v2 te) gas'
+                  | vabs x tf te => evalF tf (aextend x v2 te) gas'
                   | _ => efr_stuck
                 end
-        | tabs x T t => efr_normal (vabs x t g)
+        | trcd Fs => 
+            LETRT bs <== execF_list Fs IN efr_normal (vrcd bs)
+        | tproj t x => 
+            LETRT v <== evalF t g gas' IN
+              match v with
+                | vrcd bs => match alookup x bs with
+                               | Some v => efr_normal v
+                               | _ => efr_stuck
+                             end
+                | _ => efr_stuck
+              end
         | ttrue => efr_normal vtrue
         | tfalse => efr_normal vfalse
         | tif tb t1 t2 => 
@@ -114,6 +171,7 @@ Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
                 | vfalse => evalF t2 g gas'
                 | _ => efr_stuck
               end
+
       end
   end.
 

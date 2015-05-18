@@ -7,7 +7,7 @@ Require Export SfLib.
 Require Import LibTactics.
 
 (* Require Export Stlc. *)
-Require Export Common LDef RecordsExt.
+Require Export Common RecordsExt.
 Import P3Common Records.
 
 Module RETests.

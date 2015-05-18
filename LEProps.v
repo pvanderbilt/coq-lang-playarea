@@ -8,8 +8,10 @@ Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export Common LDef LEval.
-Import P3Common LDEF LEVAL.
+(*Require Export Common LDef LEval.
+Import P3Common LDEF LEVAL.*)
+Require Export Common RecordsExt LEval.
+Import P3Common Records LEVAL.
 
 Module LEProps.
 
@@ -85,6 +87,7 @@ Proof.
     simpl in Hvt. contradiction. 
     left. reflexivity.
     right.  reflexivity.
+    simpl in Hvt. contradiction. 
 Qed.
 
 Lemma fun_vals:
@@ -93,14 +96,12 @@ Lemma fun_vals:
       v = (vabs xf tb gf) 
       /\ (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2).
 Proof. 
-  intros T1 T2 v Hvt.  destruct v; simpl in Hvt.
+  intros T1 T2 v Hvt.  destruct v; simpl in Hvt; try contradiction.
     exists i t a. split. 
       reflexivity.
       intros va Hvat n. 
         specialize (Hvt va Hvat n). 
         destruct (evalF t (aextend i va a) n); unfold result_ok; auto.
-    contradiction.
-    contradiction.
 Qed.
 
 
@@ -191,8 +192,16 @@ Theorem evalF_is_sound_yielding_T :
     G |- t \in T ->  g :::* G -> t / g  =>: T.
 Proof.
   (* introv Hty HGg. generalize dependent G. generalize dependent g. generalize dependent T. *)
-  t_cases (induction t as [ x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) 
+  t_cases (induction t as [ | | x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) 
       Case; introv Hty HGg.
+
+  Case "ttrue".
+    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
+    rewrite <- Hev. auto.
+
+  Case "tfalse".
+    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
+    rewrite <- Hev. auto.
 
   Case "tvar". apply (ctx_tvar_then_evalsto G x T g Hty HGg).
 
@@ -202,7 +211,7 @@ Proof.
     assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
     assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
     (* use the [let_val] lemmas with Ht1 and Ht2 to decompose the two LETRT forms *)
-    apply (let_val t1 g n' _ _ (TArrow T11 T) T Hev Ht1); clear Hev Ht1;
+    apply (let_val t1 g n' _ _ (TArrow T1 T) T Hev Ht1); clear Hev Ht1;
     intros v1 er1 Hv1 Hv1t erL2 HevL2.
     apply (let_val t2 g n' _ _ _ _ HevL2 Ht2); clear HevL2 Ht2;
     intros v2 er2 Hv2 Hv2t erf Hevf.
@@ -216,13 +225,11 @@ Proof.
     rewrite <- Hev. clear Hev. intros va Hvat n. 
     apply (IHtb _ _ (aextend x va g) H4 (TC_cons _ _ _ va _ HGg Hvat)).
 
-  Case "ttrue".
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
-    rewrite <- Hev. auto.
+  Case "trcd".
+    admit. (* TBD! *)
 
-  Case "tfalse".
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
-    rewrite <- Hev. auto.
+  Case "tproj".
+    admit. (* TBD! *)
 
   Case "tif".
     inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
@@ -231,8 +238,7 @@ Proof.
     assert (Hte := IHt3 _ _ _ H6 HGg); clear IHt3 H6.
 
     specialize (Hti n'). destruct (evalF ti g n').
-       SCase "efr_normal vb". destruct e; simpl in Hti; subst er.
-          SSCase "e = (vabs ...)". contradiction.
+       SCase "efr_normal vb". destruct e; simpl in Hti; subst er; try contradiction.
           SSCase "e = vtrue".  apply (Htt n').
           SSCase "e = vfalse".  apply (Hte n').
       SCase "nogas". subst er. apply Hti.

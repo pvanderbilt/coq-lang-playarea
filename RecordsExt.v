@@ -10,7 +10,7 @@ Require Import LibTactics.
 
 Require Export Common LDef.
 Import P3Common.
-Import LDEF.
+(* Import LDEF. *)
 
 Module Records.
 
