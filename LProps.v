@@ -3,7 +3,7 @@
 (** This file develops the type safety theorem for the small-step semantics of LDef.v.
     It is currently just Pierce's StlcProp.v. *)
 
-Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 

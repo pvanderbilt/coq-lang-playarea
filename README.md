@@ -14,7 +14,8 @@ To use this software:
 
 - Obtain Pierce's "Software Foundations" 
 	[sf.tar.qz](http://www.seas.upenn.edu/~bcpierce/sf/current/sf.tar.gz),
-	unpack it someplace and change the `LoadPath` lines of each .v file.
+	unpack it someplace and change the `LoadPath` line of `Init.v` and the `PSF`
+	variable in `Makefile`.
 
 The main files are:
 

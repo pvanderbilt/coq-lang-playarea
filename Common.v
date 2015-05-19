@@ -1,7 +1,7 @@
 (** * Common Definitions *)
 (** Data structures used by other modules. *)
 
-Add LoadPath "/Users/pv/Polya/Coq/pierce_software_foundations_3.2".
+Require Init.
 Require Export SfLib.
 Require Import LibTactics.
 

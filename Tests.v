@@ -2,8 +2,7 @@
 
 (** This file contains Pierce's examples taken from Stlc.v. *)
 
-Add LoadPath  "~/Polya/coq/pierce_software_foundations_3.2".
-
+Load Init.
 Require Export LDef.
 Import LDEF.
 

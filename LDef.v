@@ -3,7 +3,7 @@
 (** This is SF's Stlc with Gamma change to be a list of declarations.
 *)
 
-Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 

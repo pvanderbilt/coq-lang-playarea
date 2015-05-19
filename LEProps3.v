@@ -6,7 +6,7 @@
     To get around this, lemmas are defined to fake the desired definition
     and a proof goes through.*)
 
-Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
