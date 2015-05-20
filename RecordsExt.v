@@ -16,16 +16,29 @@ Module Records.
 
 (* ###################################################################### *)
 
-(**  ** Syntax *)
-
-(**  *** Types [ty]
+(**  ** Syntax:
 <<
-           | X                           base type X
+       t ::=                          Terms:
+           | true, false                 boolean values
+           | x                           variable
+           | t1 t2                       application
+           | \x:T1.t2                    abstraction
+           | {F1; ...; Fn}               record 
+           | t.i                         projection
+           | if tb then te else tf       conditional
+       T ::=                          Types:
+           | X                           type variable (not used)
            | Bool                        boolean type
            | T1 -> T2                    function type
-           | {i1:T1, ..., in:Tn}         record type
+           | {L1; ...; Ln}               record type
+       F ::=                          Definitions:
+           | val x = t                   bind value to id
+       L ::=                          Declarations:
+           | val x : T                   id has type
 >> 
- *)
+*)
+
+(**  *** Types [ty] *)
 
 Inductive ty : Type :=
   | TBase     : id -> ty
@@ -35,38 +48,7 @@ Inductive ty : Type :=
 with decl : Type :=
   | Lv        : id -> ty -> decl.
 
-Tactic Notation "T_cases" tactic(first) ident(c) :=
-  first;
-  [ Case_aux c "TBase" | Case_aux c "TBool" 
-  | Case_aux c "TArrow" | Case_aux c "TRcd" ].
-
-(** In SF there is a note about how something like this doesn't 
-    give a useful induction principle we want.  So they have
-    the following:
-<<
-      | TRNil : ty
-      | TRCons : id -> ty -> ty -> ty
->>
-    Since this allows TRCons to be applied to non-record components,
-    they have a way to tell whether types are well-formed.  The same
-    thing applies to terms.
-
-    Instead, we use lists of declarations and fix the induction 
-    principle.  Similarly, record terms will be lists of definitions.
-*)
-
-(** *** Terms [tm]
-<<
-       t ::=                          Terms:
-           | true, false                 boolean values
-           | x                           variable
-           | t1 t2                       application
-           | \x:T1.t2                    abstraction
-           | {i1=t1, ..., in=tn}         record 
-           | t.i                         projection
-           | if tb then te else tf       conditional
->> 
-*)
+(** *** Terms [tm] *)
 
 Inductive tm : Type :=
   | ttrue : tm
@@ -80,6 +62,28 @@ Inductive tm : Type :=
 with def : Type :=
   | Fv    : id -> tm -> def.
 
+(** In SF there is an observation about how an embedded list doesn't 
+    give a useful induction principle, so they have
+    the following for types:
+<<
+      | TRNil : ty
+      | TRCons : id -> ty -> ty -> ty
+>>
+    Since this allows TRCons to be applied to non-record components,
+    they have a way to tell whether types are well-formed.  The same
+    thing applies to terms.
+
+    Instead, we use a list of declarations and fix the induction 
+    principle.  Similarly, record terms will be lists of definitions.
+*)
+
+(** *** "Case" tactic notations *)
+
+Tactic Notation "T_cases" tactic(first) ident(c) :=
+  first;
+  [ Case_aux c "TBase" | Case_aux c "TBool" 
+  | Case_aux c "TArrow" | Case_aux c "TRcd" ].
+
 Tactic Notation "t_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "ttrue" | Case_aux c "tfalse" 
@@ -87,7 +91,7 @@ Tactic Notation "t_cases" tactic(first) ident(c) :=
   | Case_aux c "trcd" | Case_aux c "tproj"| Case_aux c "tif" ].
 
 
-(* *** Functions for dealing with def and decl- lists *)
+(** *** Functions and lemmas for dealing with definition and declaration lists *)
 
 Definition add_vdef x t Fs := (Fv x t) :: Fs.
 Definition add_vdecl x T Ls := (Lv x T) :: Ls.
@@ -187,7 +191,7 @@ Definition lookup_vdef := lookup_gen unapply_vdef.
       (forall i : id, P (TBase i)) ->
       P TBool ->
       (forall t : ty, P t -> forall t0 : ty, P t0 -> P (TArrow t t0)) ->
-      (forall r : list decl, P (TRcd r)) ->
+      (forall r : list decl, P (TRcd r)) -> (* records *)
     forall t : ty, P t
 >>
 
@@ -335,9 +339,12 @@ Tactic Notation "t_both_cases" tactic(first) ident(c) :=
 (** ** Reduction *)
 (** *** Substitution *)
 
-(**  Coq complains when subst is defined with [Fixpoint ... with] 
+(**  Coq complains when [subst] is defined with [Fixpoint ... with] 
      as it cannot figure out that the term is not increasing in the 
-     [with] clause.  [subst] can be defined with a nested fixpoint, as follows: 
+     [with] clause.  While [subst] can be defined using the custom
+     recursion defined above, in proofs it simplifies to a mess 
+     that I can't fold back up.
+     Instead, [subst] is defined with a nested fixpoint, as follows: 
 *)
 
 Reserved Notation "'[' x ':=' s ']' t" (at level 20).
@@ -398,16 +405,17 @@ Qed.
 
 Definition subst_ugly (x:id) (s:tm) :tm -> tm := 
   tm_nest_rect (fun _ => tm) (fun _ => list def)
-    ttrue                                                             (* ttrue *)
-    tfalse                                                            (* tfalse *)
-    (fun y => if eq_id_dec x y then s else (tvar y))                  (* tvar y *)
-    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                               (* tapp t1 t2 *)
-    (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1)) (* tabs y T t1 *)
-    (fun r mr => trcd mr)                                             (* trcd r *)
-      (nil)                                                           (* r=nil *)
-      (fun i t r mt mr => (Fv i mt) :: mr)                            (* r=cons i t r *)
-    (fun t1 mt1 i => tproj mt1 i)                                     (* tproj t1 i *)
-    (fun tb mtb tt mtt te mte => tif mtb mtt mte)                     (* tif tb tt te *)
+    ttrue                                               (* ttrue *)
+    tfalse                                              (* tfalse *)
+    (fun y => if eq_id_dec x y then s else (tvar y))    (* tvar y *)
+    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                 (* tapp t1 t2 *)
+    (fun y T t1 mt1 =>                                  (* tabs y T t1 *)
+       tabs y T (if eq_id_dec x y then t1 else mt1))
+    (fun r mr => trcd mr)                               (* trcd r *)
+      (nil)                                               (* nil *)
+      (fun i t r mt mr => (Fv i mt) :: mr)                (* cons i t r *)
+    (fun t1 mt1 i => tproj mt1 i)                       (* tproj t1 i *)
+    (fun tb mtb tt mtt te mte => tif mtb mtt mte)       (* tif tb tt te *)
     .
 
 (*
@@ -494,10 +502,9 @@ Proof. reflexivity. Qed.
 (** *** Values 
 <<
        v ::=                          Values:
-           | true | false
-           | lambda x : T . t
-           | {i1=v1, ..., in=vn}         record value
-
+           | true | false                boolean values
+           | \x:T.t                      abstractions
+           | {i1=v1, ..., in=vn}         record values
 >> 
 Note that a record is a value if all of its fields are. *)
 
@@ -626,7 +633,7 @@ Hint Constructors step step_rcd.
 (* ###################################################################### *)
 (** ** Typing *)
 
-(** ** Contexts *)
+(** *** Contexts *)
 
 Definition context := list decl.
 Definition empty := nil (A:=decl).
@@ -644,6 +651,7 @@ Lemma extend_neq : forall (ctxt: context) x1 x2 T,
 Proof.
   intros. unfold extend, lookup_vdecl. rewrite neq_id; auto. 
 Qed.
+
 
 (** *** Typing rules:
 <<
@@ -741,6 +749,8 @@ Tactic Notation "has_type_cases" tactic(first) ident(c) :=
 Tactic Notation "rcd_has_type_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "TR_Nil" | Case_aux c "TR_Cons" ].
+
+(** *** Custom induction principle for typing *)
 
 Scheme has_type_ind_both := Minimality for has_type Sort Prop
 with rcd_has_type_ind_both := Minimality for rcd_has_type Sort Prop.
@@ -851,12 +861,10 @@ Proof with eauto.
 
   Case "T_Proj".
     (* If the last rule in the given derivation is [T_Proj], then 
-       [t = tproj t i] and
-           [empty |- t : (TRcd Tr)]
+       [t = tproj t x] and [empty |- t : (TRcd Tr)]
        By the IH, [t] either is a value or takes a step. *)
     right. destruct IHHt...
-    SCase "rcd is value".
-      (* Starting here, this differs from SF. *)
+    SCase "t is value".
       (* If [t] is a value and [t : TRcd Tr], we can invert the
           latter to get that [t = (trcd tr)] with [tr *: Tr] *)
       inverts Ht; try solve by inversion...
@@ -866,8 +874,8 @@ Proof with eauto.
       (* So [tproj x t ==> vx] by [ST_ProjRcd] with the inversion of H0
          to get that [vx] is a value.  *)
       exists vx. inverts H0 as H0. apply (ST_ProjRcd _ _ _ H0 Hlxr).
-    SCase "rcd_steps".
-      (* On the other hand, if [t ==> t'], then [tproj t i ==> tproj t' i]
+    SCase "t steps".
+      (* On the other hand, if [t ==> t'], then [tproj t x ==> tproj t' x]
          by [ST_Proj1]. *)
       destruct H0 as [t' Hstp]. exists (tproj t' x)...
 
@@ -878,7 +886,7 @@ Proof with eauto.
       inverts H; try inversion Ht1; eauto.
       (* destruct (canonical_forms_bool t1); subst; eauto.*)
 
-    SCase "t1 also steps".
+    SCase "t1 steps".
       inversion H as [t1' Hstp]. exists (tif t1' t2 t3)...
 
   Case "TR_Cons".
@@ -982,7 +990,7 @@ Qed.
 
 
 (* ###################################################################### *)
-(** *** Preservation *)
+(** *** Substitution preserves typing *)
 
 Lemma substitution_preserves_typing : forall Gamma x U v t S,
      (extend Gamma x U) |- t \in S  ->
@@ -993,12 +1001,10 @@ Proof with eauto 15.
      Gamma |- ([x:=v]t) S. *)
   intros Gamma x U v t S Htypt Htypv. 
   generalize dependent Gamma. generalize dependent S.
-  (* Proof: By induction on the term t.  Most cases follow directly
-     from the IH, with the exception of tvar, tabs, trcons.
-     The former aren't automatic because we must reason about how the
-     variables interact. In the case of trcons, we must do a little
-     extra work to show that substituting into a term doesn't change
-     whether it is a record term. *)
+  (* Proof: By extended induction on the term t.  Most cases follow directly
+     from the IHs, with the exception of tvar and tabs, which
+     aren't automatic because we must reason about how the
+     variables interact. *)
   Ltac spt_induction t x v U := induction t using tm_nest_rect with 
     (Q := fun r =>
       forall (RT : list decl) (Gamma : context),
@@ -1072,12 +1078,17 @@ Proof with eauto 15.
       subst. rewrite neq_id...
 
   Case "trcd". 
+    (* Due to having to define subst_rec within subst, 
+       the goal is in a form that doesn't match, so
+       we use a special lemma to get it back into a form
+       that eauto can handle. *)
     rewrite <- (subst_rcd_eqv x v rb)... 
 
-  Case "trcons".
+  Case "trcons". (* TBD: Why doesn't this work automatically? *)
     apply TR_Cons...
 Qed.
 
+(** *** Preservation *)
 
 Theorem preservation : forall t t' T,
      empty |- t \in T  ->
