@@ -8,10 +8,8 @@ Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-(*Require Export Common LDef LEval.
-Import P3Common LDEF LEVAL.*)
-Require Export Common RecordsExt LEval.
-Import P3Common Records LEVAL.
+Require Export Common LDef LEval.
+Import P3Common LDEF LEVAL.
 
 Module LEProps.
 

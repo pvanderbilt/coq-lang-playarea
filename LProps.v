@@ -1,184 +1,160 @@
-(** * LProps: Properties of LDef *)
-
-(** This file develops the type safety theorem for the small-step semantics of LDef.v.
-    It is currently just Pierce's StlcProp.v. *)
+(** * LProps: Properties of STLC Typing (for the language defined in LDef.v). *)
 
 Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export LDef.
+Require Export Common LDef.
+Import P3Common.
 
-Module LDefProps.
+Module LProps.
 Import LDEF.
 
 (* ###################################################################### *)
-(** ** Canonical Forms *)
+(** **  *)
 
-Lemma canonical_forms_bool : forall t,
-  empty |- t \in TBool ->
-  value t ->
-  (t = ttrue) \/ (t = tfalse).
-Proof.
-  intros t HT HVal.
-  inversion HVal; intros; subst; try inversion HT; auto.
-Qed.
 
-Lemma canonical_forms_fun : forall t T1 T2,
-  empty |- t \in (TArrow T1 T2) ->
-  value t ->
-  exists x u, t = tabs x T1 u.
+(* #################################### *)
+(** *** Record Field Lookup *)
+
+Lemma rcd_field_lookup : 
+  forall rb Trb x Tx,
+    empty |- rb *\in Trb ->
+    lookup_vdecl x Trb = Some Tx ->
+    exists vx, lookup_vdef x rb = Some vx /\ empty |- vx \in Tx.
 Proof.
-  intros t T1 T2 HT HVal. 
-    (* manual version:
-    inversion HVal; subst; clear HVal.
-      inversion HT; subst; clear HT. exists x0. exists t0.  auto.
-      inversion HT. 
-      inversion HT. 
-  my version:*)
-  inversion HVal; subst; inversion HT; subst; clear HVal HT.
-  (* inversion HVal; intros; subst; try inversion HT; subst; auto. -- original *)
-  exists x t0.  auto.
+  intros rb Tr x Tx Ht Hl.
+  induction Ht as [| G y vy Ty rb' Trb' Hty Ht]. 
+  Case "nil". inversion Hl.
+  Case "cons".
+    destruct (eq_id_dec y x).
+      SCase "x=y". subst. 
+        rewrite (lookup_add_vdecl_eq x Ty Trb') in Hl. inverts Hl.
+        exists vy. split.
+          apply lookup_add_vdef_eq.
+          apply Hty.
+      SCase "y<>x".
+        rewrite (lookup_add_vdecl_neq _ _ Ty Trb' n) in Hl. 
+        destruct (IHHt Hl) as [vx [Hlx HTx]]; clear IHHt.
+        exists vx. split.
+          rewrite (lookup_add_vdef_neq _ _ _ _ n). apply Hlx.
+          apply HTx.
 Qed.
-   
 
 (* ###################################################################### *)
-(** ** Progress *)
-
-(** The _progress_ theorem tells us that closed, well-typed
-    terms are not stuck: either a well-typed term is a value, or it
-    can take an evaluation step.  
-  The proof is by induction on the derivation of [|- t \in T]. *)
+(** *** Progress *)
 
 Theorem progress : forall t T, 
      empty |- t \in T ->
-     value t \/ exists t', t ==> t'.
-
-(** _Proof_: 
-
-    - The last rule of the derivation cannot be [T_Var], since a
-      variable is never well typed in an empty context.
-
-    - The [T_True], [T_False], and [T_Abs] cases are trivial, since in
-      each of these cases we know immediately that [t] is a value.
-
-    - If the last rule of the derivation was [T_App], then [t = t1
-      t2], and we know that [t1] and [t2] are also well typed in the
-      empty context; in particular, there exists a type [T2] such that
-      [|- t1 \in T2 -> T] and [|- t2 \in T2].  By the induction
-      hypothesis, either [t1] is a value or it can take an evaluation
-      step.
-
-        - If [t1] is a value, we now consider [t2], which by the other
-          induction hypothesis must also either be a value or take an
-          evaluation step.
-
-            - Suppose [t2] is a value.  Since [t1] is a value with an
-              arrow type, it must be a lambda abstraction; hence [t1
-              t2] can take a step by [ST_AppAbs].
-
-            - Otherwise, [t2] can take a step, and hence so can [t1
-              t2] by [ST_App2].
-
-        - If [t1] can take a step, then so can [t1 t2] by [ST_App1].
-
-    - If the last rule of the derivation was [T_If], then [t = if t1
-      then t2 else t3], where [t1] has type [Bool].  By the IH, [t1]
-      either is a value or takes a step.
-
-        - If [t1] is a value, then since it has type [Bool] it must be
-          either [true] or [false].  If it is [true], then [t] steps
-          to [t2]; otherwise it steps to [t3].
-
-        - Otherwise, [t1] takes a step, and therefore so does [t] (by
-          [ST_If]).
-*)
-
+     value t \/ exists t', t ==> t'. 
 Proof with eauto.
+  (* Theorem: Suppose empty |- t : T.  Then either
+       1. t is a value, or
+       2. t ==> t' for some t'.
+     Proof: By induction on the given typing derivation. *)
   intros t T Ht.
   remember (empty) as Gamma.
-  has_type_cases (induction Ht) Case; subst Gamma...
+  generalize dependent HeqGamma.
+  Ltac p_ind_tactic Ht := induction Ht using has_type_ind_both
+    with (P0 := fun G tr Tr => 
+       G = empty -> 
+       value_rcd tr \/ (exists tr', tr *==> tr')).
+  has_type_both_cases (p_ind_tactic Ht) Case; intros HeqGamma; subst; 
+    try (left; auto; fail).
+     (* the [try  (left; auto; fail)] tactic handles the value cases 
+      (T_Abs, T_True, T_False, TR_Nil) *)
+
   Case "T_Var".
-    (* contradictory: variables cannot be typed in an 
-       empty context *)
-    inversion H. 
+    (* The final rule in the given typing derivation cannot be [T_Var],
+       since it can never be the case that [empty |- x : T] (since the
+       context is empty). *)
+    inversion H.
 
-  Case "T_App". 
-    (* [t] = [t1 t2].  Proceed by cases on whether [t1] is a 
-       value or steps... *)
-    right. destruct IHHt1...
+  Case "T_App".
+    (* If the last rule applied was T_App, then [t = t1 t2], and we know 
+       from the form of the rule that
+         [empty |- t1 : T1 -> T2]
+         [empty |- t2 : T1]
+       By the induction hypothesis, each of t1 and t2 either is a value 
+       or can take a step. *)
+    right.
+    destruct IHHt1; subst...
     SCase "t1 is a value".
-      destruct IHHt2...
-      SSCase "t2 is also a value".
-        apply canonical_forms_fun in Ht1.
-          destruct Ht1 as [x0 [t0 Heq]]. subst. eexists. 
-            apply ST_AppAbs. assumption.
-          assumption.
-        (* original: 
-        assert (exists x0 t0, t1 = tabs x0 T11 t0).
-        eapply canonical_forms_fun; eauto.
-        destruct H1 as [x0 [t0 Heq]]. subst.
-        exists ([x0:=t2]t0)...
-      *)
-
+      destruct IHHt2; subst...
+      SSCase "t2 is a value".
+      (* If both [t1] and [t2] are values, then we know that 
+         [t1 = tabs x T11 t12], since abstractions are the only values
+         that can have an arrow type.  But 
+         [(tabs x T11 t12) t2 ==> [x:=t2]t12] by [ST_AppAbs]. *)
+        inversion H; subst; try (solve by inversion).
+        exists ([x:=t2]t12)...
       SSCase "t2 steps".
-(* Why doesn't this work?
-        eexists. apply ST_App2.
-          assumption.  inversion H0 as [t2' Hstp]. subst.  eapply Hstp. 
-*)
-        inversion H0 as [t2' Hstp]. exists (tapp t1 t2')...
-
+        (* If [t1] is a value and [t2 ==> t2'], then [t1 t2 ==> t1 t2'] 
+           by [ST_App2]. *)
+        destruct H0 as [t2' Hstp]. exists (tapp t1 t2')...
     SCase "t1 steps".
-      inversion H as [t1' Hstp]. exists (tapp t1' t2)...
+      (* Finally, If [t1 ==> t1'], then [t1 t2 ==> t1' t2] by [ST_App1]. *)
+      destruct H as [t1' Hstp]. exists (tapp t1' t2)...
+
+  Case "T_Rcd".
+    (* If the last rule in the given derivation is [T_Rcd], then 
+       [t = (trcd tr)], [T=(Trcd Tr)] and [empty |- tr *: Tr]. 
+      The combined induction rule requires that P0->P 
+      which is what we establish here. *)
+    destruct (IHHt eq_refl) as [Hv | [tr' Hst]]; clear IHHt.
+      SCase "value_rcd tr". left. apply (v_rcd _ Hv).
+      SCase "tr *==> tr". right. exists (trcd tr'). apply (ST_Rcd _ _ Hst).
+
+  Case "T_Proj".
+    (* If the last rule in the given derivation is [T_Proj], then 
+       [t = tproj t x] and [empty |- t : (TRcd Tr)]
+       By the IH, [t] either is a value or takes a step. *)
+    right. destruct IHHt...
+    SCase "t is value".
+      (* If [t] is a value and [t : TRcd Tr], we can invert the
+          latter to get that [t = (trcd tr)] with [tr *: Tr] *)
+      inverts Ht; try solve by inversion...
+      (* Lemma [rcd_field_lookup] shows that [lookup_vdef x tr = Some vx] for
+         some [vx].*)
+      destruct (rcd_field_lookup _ _ _ Tx H4 H) as [vx [Hlxr Htx]].
+      (* So [tproj x t ==> vx] by [ST_ProjRcd] with the inversion of H0
+         to get that [vx] is a value.  *)
+      exists vx. inverts H0 as H0. apply (ST_ProjRcd _ _ _ H0 Hlxr).
+    SCase "t steps".
+      (* On the other hand, if [t ==> t'], then [tproj t x ==> tproj t' x]
+         by [ST_Proj1]. *)
+      destruct H0 as [t' Hstp]. exists (tproj t' x)...
 
   Case "T_If".
     right. destruct IHHt1...
 
     SCase "t1 is a value".
-      destruct (canonical_forms_bool t1); subst; eauto.
+      inverts H; try inversion Ht1; eauto.
+      (* destruct (canonical_forms_bool t1); subst; eauto.*)
 
-    SCase "t1 also steps".
+    SCase "t1 steps".
       inversion H as [t1' Hstp]. exists (tif t1' t2 t3)...
+
+  Case "TR_Cons".
+    (* If the last rule was [T_Rcd] established by [TR_Cons], then 
+          [tr = cons (x, t) tr],
+          [Tr = cons (x, T) Tr],
+          [ empty |- t : Tx] and
+          [empty |- tr *: Tr].
+        By the P IH, either t is a value or it steps and
+        by the P0 IH, either tr is a value or it steps. *)
+    destruct (IHHt eq_refl) as [Hvt | [t' Hstt']]; clear IHHt.
+      SSCase "value t". 
+          destruct (IHHt0 eq_refl) as [Hvtr | [tr' Hsttr']]; clear IHHt0.
+        SSSCase "value_rcd tr". 
+          left. apply (vr_cons _ _ _ Hvt Hvtr).
+        SSSCase "tr *==> tr'". 
+          right. eexists. apply (STR_Tail _ _ _ _ Hvt Hsttr').
+      SSCase "t ==> t'". right. eexists. apply (STR_Head _ _ _ _ Hstt').
 Qed.
 
-(** (Exercise: 3 ) A proof that progress can also be proved by induction on terms
-    instead of induction on typing derivations. *)
-
-Theorem progress' : forall t T,
-     empty |- t \in T ->
-     value t \/ exists t', t ==> t'.
-Proof.
-  intros t.
-  t_cases (induction t) Case; intros T Ht; auto.
-  (* FILLED IN  *)
-    Case "tvar". inversion Ht. inversion H1.
-    Case "tapp". right. inversion Ht; subst; clear Ht. 
-        destruct IHt1 with (T:=TArrow T11 T).  (* t1 : T11-->T *) apply H2.
-      SCase "value t1". apply IHt2 in H4. clear IHt2. destruct H4.
-        SSCase "value t2". apply canonical_forms_fun in H2. 
-          destruct H2 as [x0 [t0 Heq]]. subst.
-          eexists. apply ST_AppAbs. assumption. assumption.
-        SSCase " t2 ==> t' ". destruct H0 as [t2' Ht2]. eexists. 
-          apply ST_App2. assumption. eassumption.
-      SCase "t1==>t1'". destruct H as [t1' Ht1]. eexists. 
-        apply ST_App1. eassumption.
-    Case "tif". right. inversion Ht; subst; clear Ht. 
-          destruct IHt1 with (T:=TBool). apply H3.
-      SCase "value t1". apply canonical_forms_bool in H3. destruct H3; subst.
-        SSCase "t1 = ttrue". eexists. apply ST_IfTrue.
-        SSCase "t1 = tfalse". eexists. apply ST_IfFalse.
-        apply H.
-      SCase "t1==>t1'". destruct H as [t1' Ht1]. eexists. 
-        apply ST_If. eassumption.
-Qed.
-(** [] *)
-
 (* ###################################################################### *)
-(** ** Preservation *)
-
-
-(* ###################################################################### *)
-(** *** Free Occurrences *)
+(** *** Context Invariance *)
 
 Inductive appears_free_in : id -> tm -> Prop :=
   | afi_var : forall x,
@@ -188,9 +164,15 @@ Inductive appears_free_in : id -> tm -> Prop :=
   | afi_app2 : forall x t1 t2,
       appears_free_in x t2 -> appears_free_in x (tapp t1 t2)
   | afi_abs : forall x y T11 t12,
-      y <> x  ->
-      appears_free_in x t12 ->
-      appears_free_in x (tabs y T11 t12)
+        y <> x  ->
+        appears_free_in x t12 ->
+        appears_free_in x (tabs y T11 t12)
+  | afi_proj : forall x t i,
+     appears_free_in x t ->
+     appears_free_in x (tproj t i)
+  | afi_rcd : forall x r,
+     appears_free_in_rcd x r -> 
+     appears_free_in x (trcd r)
   | afi_if1 : forall x t1 t2 t3,
       appears_free_in x t1 ->
       appears_free_in x (tif t1 t2 t3)
@@ -199,209 +181,218 @@ Inductive appears_free_in : id -> tm -> Prop :=
       appears_free_in x (tif t1 t2 t3)
   | afi_if3 : forall x t1 t2 t3,
       appears_free_in x t3 ->
-      appears_free_in x (tif t1 t2 t3).
+      appears_free_in x (tif t1 t2 t3)
 
-Tactic Notation "afi_cases" tactic(first) ident(c) :=
-  first;
-  [ Case_aux c "afi_var"
-  | Case_aux c "afi_app1" | Case_aux c "afi_app2" 
-  | Case_aux c "afi_abs" 
-  | Case_aux c "afi_if1" | Case_aux c "afi_if2" 
-  | Case_aux c "afi_if3" ].
+with appears_free_in_rcd : id -> (list def) -> Prop :=
+  | afi_rhead : forall x i ti r',
+      appears_free_in x ti ->
+      appears_free_in_rcd x (add_vdef i ti r')
+  | afi_rtail : forall x i ti r',
+      appears_free_in_rcd x r' ->
+      appears_free_in_rcd x (add_vdef i ti r').
 
-Hint Constructors appears_free_in.
+Hint Constructors appears_free_in appears_free_in_rcd.
 
-(** A term in which no variables appear free is said to be _closed_. *)
+Lemma context_invariance : forall Gamma Gamma' t S,
+     Gamma |- t \in S  ->
+     (forall x, appears_free_in x t -> 
+                lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
+     Gamma' |- t \in S.
+Proof with eauto 15.
+  intros. generalize dependent Gamma'.
+  Ltac ci_ind_tactic H := induction H using has_type_ind_both with 
+    (P0 := fun Gamma r RS => 
+      forall Gamma' : context,
+      (forall x : id, appears_free_in_rcd x r -> 
+                      lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
+      Gamma' |- r *\in RS).
+  has_type_both_cases (ci_ind_tactic H) Case; intros Gamma' Heqv...
+  Case "T_Var".
+    apply T_Var... rewrite <- Heqv...
+  Case "T_Abs".
+    apply T_Abs... apply IHhas_type. intros y Hafi.
+    unfold extend, lookup_vdecl. destruct (eq_id_dec x y)...
+Qed.
 
-Definition closed (t:tm) :=
-  forall x, ~ appears_free_in x t.
-
-(* ###################################################################### *)
-(** *** Substitution *)
 
 Lemma free_in_context : forall x t T Gamma,
    appears_free_in x t ->
    Gamma |- t \in T ->
-   exists T', lookup_vdecl x Gamma = Some T'.
-Proof.
-  intros x t T Gamma H H0. generalize dependent Gamma. 
-  generalize dependent T. 
-  afi_cases (induction H) Case; 
-         intros; try solve [inversion H0; eauto].
-  Case "afi_abs".
-    inversion H1; subst.
-    apply IHappears_free_in in H7.
-    rewrite lookup_add_vdecl_neq in H7; assumption.
-Qed.
-
-(** Next, we'll need the fact that any term [t] which is well typed in
-    the empty context is closed -- that is, it has no free variables. *)
-
-(** ** (Exercise: 2 stars, optional (typable_empty__closed))  *)
-Corollary typable_empty__closed : forall t T, 
-    empty |- t \in T  ->
-    closed t.
-Proof.
-  (* FILLED IN *) 
-  intros t T Hin x Hfree.
-  apply free_in_context with (T:=T) (Gamma:=empty) in Hfree. 
-  destruct Hfree. inversion H. assumption.
-Qed.
-
-Lemma context_invariance : forall Gamma Gamma' t T,
-     Gamma |- t \in T  ->
-     (forall x, appears_free_in x t -> 
-                lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
-     Gamma' |- t \in T.
-
+   exists T',  lookup_vdecl x Gamma = Some T'.
 Proof with eauto.
-  intros. 
-  generalize dependent Gamma'.
-  has_type_cases (induction H) Case; intros; auto.
-  Case "T_Var".
-    apply T_Var. rewrite <- H0...
+  intros x t T Gamma Hafi Htyp.
+  Ltac fic_ind_tactic H x := induction H using has_type_ind_both with 
+    (P0 := fun Gamma r RS => 
+      appears_free_in_rcd x r ->
+      Gamma |- r *\in RS ->
+      exists T', lookup_vdecl x Gamma = Some T').
+  has_type_both_cases (fic_ind_tactic Htyp x) Case; 
+    inversion Hafi; subst...
   Case "T_Abs".
-    apply T_Abs.
-    apply IHhas_type. intros x1 Hafi.
-    (* the only tricky step... the [Gamma'] we use to 
-       instantiate is [extend Gamma x T11] *)
-    unfold add_vdecl, lookup_vdecl. destruct (eq_id_dec x x1)... 
-  Case "T_App".
-    apply T_App with T11...  
+    destruct IHHtyp as [T' Hctx]... exists T'.
+    unfold extend, lookup_vdecl in Hctx. 
+    rewrite neq_id in Hctx... 
 Qed.
 
-
-(** _Lemma_: If [Gamma,x:U |- t \in T] and [|- v \in U], then [Gamma |-
-    [x:=v]t \in T]. *)
-
-Lemma substitution_preserves_typing : forall Gamma x U t v T,
-     add_vdecl x U Gamma |- t \in T ->
-     empty |- v \in U   ->
-     Gamma |- [x:=v]t \in T.
-
-(** One technical subtlety in the statement of the lemma is that we
-    assign [v] the type [U] in the _empty_ context -- in other words,
-    we assume [v] is closed.  This assumption considerably simplifies
-    the [T_Abs] case of the proof (compared to assuming [Gamma |- v \in
-    U], which would be the other reasonable assumption at this point)
-    because the context invariance lemma then tells us that [v] has
-    type [U] in any context at all -- we don't have to worry about
-    free variables in [v] clashing with the variable being introduced
-    into the context by [T_Abs]. *)
-
-Proof with eauto.
-  intros Gamma x U t v T Ht Ht'.
-  generalize dependent Gamma. generalize dependent T. 
-  t_cases (induction t) Case; intros T Gamma H;
-    (* in each case, we'll want to get at the derivation of H *)
-    inversion H; subst; clear H (* added *); simpl...
-  Case "tvar".
-    rename i into y. destruct (eq_id_dec x y).
-    SCase "x=y".
-      subst. 
-      rewrite lookup_add_vdecl_eq in H2.
-      inversion H2; subst. clear H2.
-      eapply context_invariance... intros x Hcontra.
-      (* added Ht' & removed .. *)
-      destruct (free_in_context _ _ T empty Hcontra Ht') as [T' HT']. 
-      inversion HT'.
-    SCase "x<>y".
-      apply T_Var. rewrite lookup_add_vdecl_neq in H2... 
-  Case "tabs".
-    rename i into y. apply T_Abs.
-    destruct (eq_id_dec x y).
-    SCase "x=y".
-      eapply context_invariance...
-      subst.
-      intros x Hafi. unfold add_vdecl, lookup_vdecl.
-      destruct (eq_id_dec y x)...
-    SCase "x<>y".
-      apply IHt. eapply context_invariance...
-      intros z Hafi. unfold add_vdecl, lookup_vdecl.
-      destruct (eq_id_dec y z)...
-      subst. rewrite neq_id... 
-Qed.
-
-(** The substitution lemma can be viewed as a kind of "commutation"
-    property.  Intuitively, it says that substitution and typing can
-    be done in either order: we can either assign types to the terms
-    [t] and [v] separately (under suitable contexts) and then combine
-    them using substitution, or we can substitute first and then
-    assign a type to [ [x:=v] t ] -- the result is the same either
-    way. *)
 
 (* ###################################################################### *)
-(** *** Main Theorem *)
+(** *** Substitution preserves typing *)
 
-(** Preservation: if a closed
-    term [t] has type [T], and takes an evaluation step to [t'], then [t']
-    is also a closed term with type [T].  In other words, the small-step
-    evaluation relation preserves types.
-    Proof by induction on the derivation of [|- t \in T].
-*)
+Lemma substitution_preserves_typing : forall Gamma x U v t S,
+     (extend Gamma x U) |- t \in S  ->
+     empty |- v \in U   ->
+     Gamma |- ([x:=v]t) \in S.
+Proof with eauto 15.
+  (* Theorem: If Gamma,x:U |- t : S and empty |- v : U, then 
+     Gamma |- ([x:=v]t) S. *)
+  intros Gamma x U v t S Htypt Htypv. 
+  generalize dependent Gamma. generalize dependent S.
+  (* Proof: By extended induction on the term t.  Most cases follow directly
+     from the IHs, with the exception of tvar and tabs, which
+     aren't automatic because we must reason about how the
+     variables interact. *)
+  Ltac spt_induction t x v U := induction t using tm_nest_rect with 
+    (Q := fun r =>
+      forall (RT : list decl) (Gamma : context),
+        (extend Gamma x U) |- r *\in RT -> 
+        Gamma |- (subst_rcd x v r) *\in RT).
+  t_both_cases (spt_induction t x v U) Case; 
+    intros S Gamma Htypt; simpl; inverts Htypt...
+
+  Case "tvar".
+    simpl. rename x0 into y.
+    (* If t = y, we know that
+         [empty |- v : U] and
+         [Gamma,x:U |- y : S]
+       and, by inversion, [extend Gamma x U y = Some S].  We want to
+       show that [Gamma |- [x:=v]y : S].
+
+       There are two cases to consider: either [x=y] or [x<>y]. *)
+    destruct (eq_id_dec x y). 
+    SCase "x=y".
+    (* If [x = y], then we know that [U = S], and that [[x:=v]y = v].
+       So what we really must show is that if [empty |- v : U] then
+       [Gamma |- v : U].  We have already proven a more general version
+       of this theorem, called context invariance. *)
+      subst.
+      unfold extend, lookup_vdecl in H1. rewrite eq_id in H1. 
+      inversion H1; subst. clear H1.
+      eapply context_invariance...
+      intros x Hcontra.
+      destruct (free_in_context _ _ S empty Hcontra) as [T' HT']...
+      inversion HT'.
+    SCase "x<>y".
+    (* If [x <> y], then [Gamma y = Some S] and the substitution has no
+       effect.  We can show that [Gamma |- y : S] by [T_Var]. *)
+      apply T_Var... unfold extend, lookup_vdecl in H1. rewrite neq_id in H1...
+
+  Case "tabs".
+    rename x0 into y. rename T into T1.
+    (* If [t = tabs y T1 t0], then we know that
+         [Gamma,x:U |- tabs y T11 t0 : T1->T2]
+         [Gamma,x:U,y:T1 |- t0 : T2]
+         [empty |- v : U]
+       As our IH, we know that forall S Gamma, 
+         [Gamma,x:U |- t0 : S -> Gamma |- [x:=v]t0 S].
+    
+       We can calculate that 
+         [x:=v]t = tabs y T11 (if beq_id x y then t0 else [x:=v]t0)
+       And we must show that [Gamma |- [x:=v]t : T11->T12].  We know
+       we will do so using [T_Abs], so it remains to be shown that:
+         [Gamma,y:T11 |- if beq_id x y then t0 else [x:=v]t0 : T12]
+       We consider two cases: [x = y] and [x <> y].
+    *)
+    apply T_Abs...
+    destruct (eq_id_dec x y).
+    SCase "x=y".
+    (* If [x = y], then the substitution has no effect.  Context
+       invariance shows that [Gamma,y:U,y:T11] and [Gamma,y:T11] are
+       equivalent.  Since the former context shows that [t0 : T12], so
+       does the latter. *)
+      eapply context_invariance...
+      subst.
+      intros x Hafi. unfold extend, lookup_vdecl.
+      destruct (eq_id_dec y x)...
+    SCase "x<>y".
+    (* If [x <> y], then the IH and context invariance allow us to show that
+         [Gamma,x:U,y:T1 |- t : T2]       =>
+         [Gamma,y:T11,x:U |- t : T2]      =>
+         [Gamma,y:T11 |- [x:=v]t : T2] *)
+      apply IHt. eapply context_invariance...
+      intros z Hafi. unfold extend, lookup_vdecl.
+      destruct (eq_id_dec y z)... 
+      subst. rewrite neq_id...
+
+  Case "trcd". 
+    (* Due to having to define subst_rec within subst, 
+       the goal is in a form that doesn't match, so
+       we use a special lemma to get it back into a form
+       that eauto can handle. *)
+    rewrite <- (subst_rcd_eqv x v rb)... 
+
+  Case "trcons". (* TBD: Why doesn't this work automatically? *)
+    apply TR_Cons...
+Qed.
+
+(** *** Preservation *)
 
 Theorem preservation : forall t t' T,
      empty |- t \in T  ->
      t ==> t'  ->
      empty |- t' \in T.
-
 Proof with eauto.
-  remember (empty) as Gamma.
-  intros t t' T HT. generalize dependent t'.  
-      (* playing around:
-        has_type_cases (induction HT) Case. admit. admit. admit.  admit. admit. 
-        intros t' HE. subst Gamma. subst. inversion HE. subst. assumption. subst. assumption. subst. apply T_If; try assumption.
-        apply IHHT1. reflexivity . apply H3. *)
-       has_type_cases (induction HT) Case;
-       intros t' HE; subst Gamma; subst; 
-       try solve [inversion HE; subst; auto].
+  intros t t' T HT.
+  (* Theorem: If [empty |- t : T] and [t ==> t'], then [empty |- t' : T]. *)
+  remember (empty) as Gamma. generalize dependent HeqGamma.
+  generalize dependent t'.
+  (* Proof: By induction on the given typing derivation.  Many cases are
+     contradictory ([T_Var], [T_Abs]) or follow directly from the IH
+     ([T_RCons]).  We show just the interesting ones. *)
+  Ltac pres_ind_tactic HT := induction HT using has_type_ind_both
+    with (P0 := fun Gamma tr Tr => forall tr' : list def,
+       Gamma = empty -> 
+       tr *==> tr' ->
+       Gamma |- tr' *\in Tr).
+  has_type_both_cases (pres_ind_tactic HT) Case;
+    introv HeqGamma HE; subst; inverts HE... 
+
   Case "T_App".
-    inversion HE; subst...
-    (* Most of the cases are immediate by induction, 
-       and [eauto] takes care of them *)
+    (* If the last rule used was [T_App], then [t = t1 t2], and three rules
+       could have been used to show [t ==> t']: [ST_App1], [ST_App2], and 
+       [ST_AppAbs]. In the first two cases, the result follows directly from 
+       the IH. *)
     SCase "ST_AppAbs".
-      apply substitution_preserves_typing with T11...
-      inversion HT1...  
+      (* For the third case, suppose 
+           [t1 = tabs x T11 t12]
+         and
+           [t2 = v2].  We must show that [empty |- [x:=v2]t12 : T2]. 
+         We know by assumption that
+             [empty |- tabs x T11 t12 : T1->T2]
+         and by inversion
+             [x:T1 |- t12 : T2]
+         We have already proven that substitution_preserves_typing and 
+             [empty |- v2 : T1]
+         by assumption, so we are done. *)
+      apply substitution_preserves_typing with T1...
+      inversion HT1...
+
+  Case "T_Proj".
+    (* If the last rule was [T_Proj], then [t = tproj t0 x] 
+       where [t0 : (TRcd Tr)] and [lookup_vdecl x Tr = Some T]
+       for some [t0], [x] and [Tr]. Two rules could have caused 
+       [t ==> t']: [ST_Proj1] and [ST_ProjRcd].  The typing
+       of [t'] follows from the IH in the former case.
+
+       In the [ST_ProjRcd] case, [t0 = (trcd r)] for some [r]
+       where [value_rcd r] and [lookup_vdef x r = Some t'].
+       Inverting Ht gives [r *: Tr] and we can apply lemma
+       [rcd_field_lookup] to find the record element this
+       projection steps to. *)
+    inverts HT.
+    destruct (rcd_field_lookup _ _ _ _ H5 H) as [vx [ Hlxr Htx]].
+    rewrite H4 in Hlxr. inversion Hlxr...
+
 Qed.
+(** [] *)
 
-
-(* ###################################################################### *)
-(** ** Type Soundness *)
-
-(** Progress and preservation together imply that a well-typed
-    term can _never_ reach a stuck state.  *)
-
-Definition normal_form {X:Type} (R:relation X) (t:X) : Prop :=
-  ~ exists t', R t t'.
-
-Definition stuck (t:tm) : Prop :=
-  (normal_form step) t /\ ~ value t.
-
-Corollary soundness : forall t t' T,
-  empty |- t \in T -> 
-  t ==>* t' ->
-  ~(stuck t').
-Proof.
-  intros t t' T Hhas_type Hmulti. unfold stuck.
-  intros [Hnf Hnot_val]. unfold normal_form in Hnf.
-  induction Hmulti   (* FILLED IN  *)  as [ x | x y z ].
-    Case "multi_refl: x==>x". 
-      apply progress in Hhas_type. destruct Hhas_type; auto.
-    Case "multi_step: x==>y, y==>*z". 
-      apply IHHmulti; try assumption.
-      eapply preservation.
-        apply Hhas_type.
-        assumption.
-Qed.
-
-(* ###################################################################### *)
-(** ** Uniqueness of Types *)
-
-(** Another pleasant property of the STLC is that types are
-    unique: a given term (in a given context) has at most one
-    type.  
-
-    (Exercise) TBD: Formalize this statement and prove it. *)
-(* FILL IN HERE *)
-
-End LDefProps.
+End LProps.

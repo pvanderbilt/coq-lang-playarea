@@ -6,9 +6,8 @@ Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-(* Require Export Stlc. *)
-Require Export Common RecordsExt.
-Import P3Common Records.
+Require Export Common LDef.
+Import P3Common LDEF.
 
 Module RETests.
 
