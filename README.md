@@ -1,31 +1,38 @@
 # coq-lang-playarea
-A repository for experimenting with Coq and programming language properties.
+STLC in Coq extended with a sound big-step semantics and functions as closures.
 
-The current experiment is to prove the soundness of a big-step semantics for Pierce's
-version of STLC.  This semantics is based on an `evalF` function that uses a
-runtime context (a mapping identifiers to values), function closures and a
-return type that has normal return, "no gas" and "stuck" alternatives.  In this
-context, I define soundness to mean that a well-typed term does not get stuck.
-I believe I have accomplished this, see [LEProps.v](LEProps.v).
+This project starts with Software Foundation's ("SF's") STLC (simply typed lambda calculus) 
+as defined in Coq and extends it in various ways:
+
+- Added: a big-step semantics in the form of an `evalF` function that uses a
+	runtime context, function closures and a
+	return type that has normal return, "no gas" and "stuck" alternatives.
+	See [LEval.v](LEval.v)
+
+- Soundness proved: `evalF` on a well-typed term does not get stuck.
+	See [LEProps.v](LEProps.v).
+
 
 To use this software:
 
 - Obtain the Coq interactive theorem prover [here](https://coq.inria.fr/download).
 
-- Obtain Pierce's "Software Foundations" 
+- Obtain the "Software Foundations" library (by Pierce et. al.)
 	[sf.tar.qz](http://www.seas.upenn.edu/~bcpierce/sf/current/sf.tar.gz),
 	unpack it someplace and change the `LoadPath` line of `Init.v` and the `PSF`
-	variable in `Makefile`.
+	variable in `Makefile` to its location.
 
 The main files are:
 
 - [LEval.v](LEval.v): Contains the definitions of the `eval` relation and `evalF` function;
-	the latter is the key one. It also defines association lists, an `evalue` type, 
-	and runtime contexts.
+	the latter is the key one. It also defines `alists` (association lists), 
+	an `evalue` type (of values produced by `evalF`), 
+	and runtime contexts (alists of `evalues`).
 
 - [LEProps.v](LEProps.v): The main content is a proof that `evalF`, 
 	when applied a well-typed term, either yields a value of that type 
-	or "runs out of gas"; it does not get stuck.  Soundness, as defined above, follows directly.
+	or "runs out of gas"; it does not get stuck.  
+	Soundness, as defined above, follows directly.
 	This file also defines:
 	- a `value_has_type` relation (`v ::: T`) that relates `(v : evalue)` instances 
 		and STLC types (`T : ty`);
