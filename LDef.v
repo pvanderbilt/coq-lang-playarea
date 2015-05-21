@@ -623,10 +623,19 @@ Tactic Notation "step_rcd_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "STR_Head" | Case_aux c "STR_Tail" ].
 
+Hint Constructors step step_rcd.
+
+(** *** Multi-step *)
+
 Notation multistep := (multi step).
 Notation "t1 '==>*' t2" := (multistep t1 t2) (at level 40).
 
-Hint Constructors step step_rcd.
+Tactic Notation "print_goal" := match goal with |- ?x => idtac x end.
+Tactic Notation "normalize" := 
+   repeat (print_goal; eapply multi_step ; 
+             [ (eauto 10; fail) | (instantiate; simpl)]);
+   apply multi_refl.
+
  
 
 (* ###################################################################### *)
@@ -636,21 +645,6 @@ Hint Constructors step step_rcd.
 
 Definition context := list decl.
 Definition empty := nil (A:=decl).
-Definition extend (Gamma : context) (x : id) (T : ty) := (Lv x T) :: Gamma.
-
-Lemma extend_eq : forall (ctxt: context) x T,
-  lookup_vdecl x (extend ctxt x T) = Some T.
-Proof.
-  intros. unfold extend, lookup_vdecl. rewrite eq_id; auto. 
-Qed.
-
-Lemma extend_neq : forall (ctxt: context) x1 x2 T,
-  x2 <> x1 ->
-  lookup_vdecl x1 (extend ctxt x2 T) = lookup_vdecl x1 ctxt.
-Proof.
-  intros. unfold extend, lookup_vdecl. rewrite neq_id; auto. 
-Qed.
-
 
 (** *** Typing rules:
 <<
@@ -703,7 +697,7 @@ Inductive has_type : context -> tm -> ty -> Prop :=
       lookup_vdecl x Gamma = Some T ->
       Gamma |- tvar x \in T
   | T_Abs : forall Gamma x T1 T2 tb,
-      (extend Gamma x T1) |- tb \in T2 -> 
+      add_vdecl x T1 Gamma |- tb \in T2 -> 
       Gamma |- (tabs x T1 tb) \in (TArrow T1 T2)
   | T_App : forall T1 T2 Gamma t1 t2,
       Gamma |- t1 \in (TArrow T1 T2) -> 

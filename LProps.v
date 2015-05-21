@@ -211,7 +211,7 @@ Proof with eauto 15.
     apply T_Var... rewrite <- Heqv...
   Case "T_Abs".
     apply T_Abs... apply IHhas_type. intros y Hafi.
-    unfold extend, lookup_vdecl. destruct (eq_id_dec x y)...
+    unfold add_vdecl, lookup_vdecl. destruct (eq_id_dec x y)...
 Qed.
 
 
@@ -230,7 +230,7 @@ Proof with eauto.
     inversion Hafi; subst...
   Case "T_Abs".
     destruct IHHtyp as [T' Hctx]... exists T'.
-    unfold extend, lookup_vdecl in Hctx. 
+    unfold add_vdecl, lookup_vdecl in Hctx. 
     rewrite neq_id in Hctx... 
 Qed.
 
@@ -239,7 +239,7 @@ Qed.
 (** *** Substitution preserves typing *)
 
 Lemma substitution_preserves_typing : forall Gamma x U v t S,
-     (extend Gamma x U) |- t \in S  ->
+     add_vdecl x U Gamma |- t \in S  ->
      empty |- v \in U   ->
      Gamma |- ([x:=v]t) \in S.
 Proof with eauto 15.
@@ -254,7 +254,7 @@ Proof with eauto 15.
   Ltac spt_induction t x v U := induction t using tm_nest_rect with 
     (Q := fun r =>
       forall (RT : list decl) (Gamma : context),
-        (extend Gamma x U) |- r *\in RT -> 
+        add_vdecl x U Gamma |- r *\in RT -> 
         Gamma |- (subst_rcd x v r) *\in RT).
   t_both_cases (spt_induction t x v U) Case; 
     intros S Gamma Htypt; simpl; inverts Htypt...
@@ -275,7 +275,7 @@ Proof with eauto 15.
        [Gamma |- v : U].  We have already proven a more general version
        of this theorem, called context invariance. *)
       subst.
-      unfold extend, lookup_vdecl in H1. rewrite eq_id in H1. 
+      unfold add_vdecl, lookup_vdecl in H1. rewrite eq_id in H1. 
       inversion H1; subst. clear H1.
       eapply context_invariance...
       intros x Hcontra.
@@ -284,7 +284,7 @@ Proof with eauto 15.
     SCase "x<>y".
     (* If [x <> y], then [Gamma y = Some S] and the substitution has no
        effect.  We can show that [Gamma |- y : S] by [T_Var]. *)
-      apply T_Var... unfold extend, lookup_vdecl in H1. rewrite neq_id in H1...
+      apply T_Var... unfold add_vdecl, lookup_vdecl in H1. rewrite neq_id in H1...
 
   Case "tabs".
     rename x0 into y. rename T into T1.
@@ -311,7 +311,7 @@ Proof with eauto 15.
        does the latter. *)
       eapply context_invariance...
       subst.
-      intros x Hafi. unfold extend, lookup_vdecl.
+      intros x Hafi. unfold add_vdecl, lookup_vdecl.
       destruct (eq_id_dec y x)...
     SCase "x<>y".
     (* If [x <> y], then the IH and context invariance allow us to show that
@@ -319,7 +319,7 @@ Proof with eauto 15.
          [Gamma,y:T11,x:U |- t : T2]      =>
          [Gamma,y:T11 |- [x:=v]t : T2] *)
       apply IHt. eapply context_invariance...
-      intros z Hafi. unfold extend, lookup_vdecl.
+      intros z Hafi. unfold add_vdecl, lookup_vdecl.
       destruct (eq_id_dec y z)... 
       subst. rewrite neq_id...
 

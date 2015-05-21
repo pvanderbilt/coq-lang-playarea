@@ -204,7 +204,7 @@ Proof.
   (* FILLED IN *)
   apply T_Abs.
   apply T_Abs.
-  apply T_App with (T11:=TBool). apply T_Var. apply lookup_add_vdecl_eq.
+  apply T_App with (T1:=TBool). apply T_Var. apply lookup_add_vdecl_eq.
   apply T_App with TBool. apply T_Var. apply lookup_add_vdecl_eq.
   apply T_Var. apply lookup_add_vdecl_neq. unfold not. intro HP. inversion HP. 
 Qed.
@@ -235,7 +235,7 @@ Proof.
   intro.
   apply T_Abs.
   apply T_Abs.
-  apply T_App with (T11:=TBool). apply T_Var. apply lookup_add_vdecl_eq.
+  apply T_App with (T1:=TBool). apply T_Var. apply lookup_add_vdecl_eq.
   apply T_App with TBool. apply T_Var. reflexivity. (* it DOES work. *)
   apply T_Var. apply lookup_add_vdecl_neq. discriminate.
 Qed.
@@ -314,8 +314,7 @@ Proof.
   inversion H2; subst; clear H2.
   inversion H4; subst; clear H4.
   rewrite H1 in H2. inversion H2. clear H1 H2.
-  induction T11. 
-    inversion H0. 
-    inversion H0. apply IHT11_1. rewrite H2. apply H1.
+  induction T1; inversion H0. 
+    apply IHT1_1. rewrite H2. apply H1.
 Qed.
 
