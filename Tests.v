@@ -118,7 +118,7 @@ Proof.
   apply multi_refl.  Qed. 
 
 
-(** A more automatic proof *)
+(** A more automatic proof using [normalize] as defined in LDef.v *)
 
 Lemma step_example1' :
   (tapp idBB idB) ==>* idB.

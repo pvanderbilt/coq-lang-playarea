@@ -140,6 +140,13 @@ Proof.
   intros. simpl. apply neq_id. apply H.
 Qed.
 
+Lemma lookup_add_vdecl_shadow : forall (ctxt: list decl) t1 t2 x1 x2,
+  lookup_vdecl x1 (add_vdecl x2 t2 (add_vdecl x2 t1 ctxt))  
+    = lookup_vdecl x1 (add_vdecl x2 t2 ctxt).
+Proof with auto.
+  intros. unfold add_vdecl, lookup_vdecl. destruct (eq_id_dec x2 x1)...
+Qed.
+
 (* TBD: Try some of these attempts at making the above more generic:
 
 Definition lookup_generic {T U : Type} 
@@ -368,6 +375,10 @@ Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
   end
 
 where "'[' x ':=' s ']' t" := (subst x s t).
+
+(**  This substitution assumes that [s] is closed,
+     which is OK since the step relation is only defined on closed terms.
+     This would need to change if [s] was allowed to have free variables.*)
 
 (**  In order to make the nested fixpoint visible, it is defined again as
      [subst_rcd] and a lemma is given that supports rewriting the nested
@@ -630,8 +641,17 @@ Hint Constructors step step_rcd.
 Notation multistep := (multi step).
 Notation "t1 '==>*' t2" := (multistep t1 t2) (at level 40).
 
-Tactic Notation "print_goal" := match goal with |- ?x => idtac x end.
+(** **** Normalization tactics *)
+
 Tactic Notation "normalize" := 
+   repeat (eapply multi_step ; 
+             [ (eauto 10; fail) | (instantiate; simpl)]);
+   apply multi_refl.
+
+(** verbose version: *)
+
+Tactic Notation "print_goal" := match goal with |- ?x => idtac x end.
+Tactic Notation "normalize_v" := 
    repeat (print_goal; eapply multi_step ; 
              [ (eauto 10; fail) | (instantiate; simpl)]);
    apply multi_refl.

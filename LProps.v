@@ -11,8 +11,37 @@ Module LProps.
 Import LDEF.
 
 (* ###################################################################### *)
-(** **  *)
+(** ** Progress *)
 
+(** *** Canonical Forms *)
+(**  These lemmas aren't currently used. *)
+
+Lemma canonical_forms_bool : forall t,
+  empty |- t \in TBool ->
+  value t ->
+  (t = ttrue) \/ (t = tfalse).
+Proof.
+  intros t HT HVal.
+  inversion HVal; intros; subst; try inversion HT; auto.
+Qed.
+
+Lemma canonical_forms_fun : forall t T1 T2,
+  empty |- t \in (TArrow T1 T2) ->
+  value t ->
+  exists x u, t = tabs x T1 u.
+Proof.
+  intros t T1 T2 HT HVal. 
+    (* manual version:
+    inversion HVal; subst; clear HVal.
+      inversion HT; subst; clear HT. exists x0. exists t0.  auto.
+      inversion HT. 
+      inversion HT. 
+  my version:*)
+  inversion HVal; subst; inversion HT; subst; clear HVal HT.
+  (* inversion HVal; intros; subst; try inversion HT; subst; auto. -- original *)
+  exists x t12.  auto.
+Qed.
+   
 
 (* #################################### *)
 (** *** Record Field Lookup *)
@@ -42,7 +71,7 @@ Proof.
 Qed.
 
 (* ###################################################################### *)
-(** *** Progress *)
+(** *** Progress theorem *)
 
 Theorem progress : forall t T, 
      empty |- t \in T ->
@@ -154,7 +183,8 @@ Proof with eauto.
 Qed.
 
 (* ###################################################################### *)
-(** *** Context Invariance *)
+(** ** Subsitution preserves typing *)
+(** *** Definition of _free_ varaible *)
 
 Inductive appears_free_in : id -> tm -> Prop :=
   | afi_var : forall x,
@@ -193,6 +223,45 @@ with appears_free_in_rcd : id -> (list def) -> Prop :=
 
 Hint Constructors appears_free_in appears_free_in_rcd.
 
+(** *** Definition of a _closed_ term *)
+
+Definition closed (t:tm) :=
+  forall x, ~ appears_free_in x t.
+
+(** *** If [x] is free in typable [t], it must be defined by the context. *)
+Lemma free_in_context : forall x t T Gamma,
+   appears_free_in x t ->
+   Gamma |- t \in T ->
+   exists T',  lookup_vdecl x Gamma = Some T'.
+Proof with eauto.
+  intros x t T Gamma Hafi Htyp.
+  Ltac fic_ind_tactic H x := induction H using has_type_ind_both with 
+    (P0 := fun Gamma r RS => 
+      appears_free_in_rcd x r ->
+      Gamma |- r *\in RS ->
+      exists T', lookup_vdecl x Gamma = Some T').
+  has_type_both_cases (fic_ind_tactic Htyp x) Case; 
+    inversion Hafi; subst...
+  Case "T_Abs".
+    destruct IHHtyp as [T' Hctx]... exists T'.
+    unfold add_vdecl, lookup_vdecl in Hctx. 
+    rewrite neq_id in Hctx... 
+Qed.
+
+(** *** If a term is typable in the empty context it must be closed. *)
+Corollary typable_empty__closed : forall t T, 
+    empty |- t \in T  ->
+    closed t.
+Proof.
+  intros t T Hin x Hfree.
+  apply free_in_context with (T:=T) (Gamma:=empty) in Hfree. 
+  destruct Hfree. inversion H. assumption.
+Qed.
+
+(** *** Context Invariance theorem *)
+(** If [Gamma] and [Gamma]' agree on all free variables of a term [t],
+    the type of [t] is the same for both contexts.
+*)
 Lemma context_invariance : forall Gamma Gamma' t S,
      Gamma |- t \in S  ->
      (forall x, appears_free_in x t -> 
@@ -215,28 +284,9 @@ Proof with eauto 15.
 Qed.
 
 
-Lemma free_in_context : forall x t T Gamma,
-   appears_free_in x t ->
-   Gamma |- t \in T ->
-   exists T',  lookup_vdecl x Gamma = Some T'.
-Proof with eauto.
-  intros x t T Gamma Hafi Htyp.
-  Ltac fic_ind_tactic H x := induction H using has_type_ind_both with 
-    (P0 := fun Gamma r RS => 
-      appears_free_in_rcd x r ->
-      Gamma |- r *\in RS ->
-      exists T', lookup_vdecl x Gamma = Some T').
-  has_type_both_cases (fic_ind_tactic Htyp x) Case; 
-    inversion Hafi; subst...
-  Case "T_Abs".
-    destruct IHHtyp as [T' Hctx]... exists T'.
-    unfold add_vdecl, lookup_vdecl in Hctx. 
-    rewrite neq_id in Hctx... 
-Qed.
-
 
 (* ###################################################################### *)
-(** *** Substitution preserves typing *)
+(** *** Substitution preserves typing lemma *)
 
 Lemma substitution_preserves_typing : forall Gamma x U v t S,
      add_vdecl x U Gamma |- t \in S  ->
@@ -334,8 +384,13 @@ Proof with eauto 15.
     apply TR_Cons...
 Qed.
 
-(** *** Preservation *)
-
+(** *** The Preservation Theorem *)
+(** Preservation: if a closed
+    term [t] has type [T], and takes an evaluation step to [t'], then [t']
+    is also a closed term with type [T].  In other words, the small-step
+    evaluation relation preserves types.
+    Proof by induction on the derivation of [|- t \in T].
+*)
 Theorem preservation : forall t t' T,
      empty |- t \in T  ->
      t ==> t'  ->
@@ -394,5 +449,34 @@ Proof with eauto.
 
 Qed.
 (** [] *)
+
+(* ###################################################################### *)
+(** ** Type Soundness *)
+
+(** Progress and preservation together imply that a well-typed
+    term can _never_ reach a stuck state.  *)
+
+Definition normal_form {X:Type} (R:relation X) (t:X) : Prop :=
+  ~ exists t', R t t'.
+
+Definition stuck (t:tm) : Prop :=
+  (normal_form step) t /\ ~ value t.
+
+Corollary soundness : forall t t' T,
+  empty |- t \in T -> 
+  t ==>* t' ->
+  ~(stuck t').
+Proof.
+  intros t t' T Hhas_type Hmulti. unfold stuck.
+  intros [Hnf Hnot_val]. unfold normal_form in Hnf.
+  induction Hmulti as [ x | x y z ].
+    Case "multi_refl: x==>x". 
+      apply progress in Hhas_type. destruct Hhas_type; auto.
+    Case "multi_step: x==>y, y==>*z". 
+      apply IHHmulti; try assumption.
+      eapply preservation.
+        apply Hhas_type.
+        assumption.
+Qed.
 
 End LProps.
