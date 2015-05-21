@@ -1,16 +1,23 @@
 # coq-lang-playarea
 STLC in Coq extended with a sound big-step semantics and functions as closures.
 
-This project starts with Software Foundation's ("SF's") STLC (simply typed lambda calculus) 
+This project starts with Software Foundation's ("SF's") simply typed lambda calculus (STLC) 
 as defined in Coq and extends it in various ways:
 
-- Added: a big-step semantics in the form of an `evalF` function that uses a
+- Added a big-step semantics in the form of an `evalF` function that uses a
 	runtime context, function closures and a
 	return type that has normal return, "no gas" and "stuck" alternatives.
 	See [LEval.v](LEval.v)
 
-- Soundness proved: `evalF` on a well-typed term does not get stuck.
+- Proved soundness wrt `evalF`: on a well-typed term, `evalF` does not get stuck.
 	See [LEProps.v](LEProps.v).
+
+- Added records as lists, where a record term contains a list of definitions
+	and a record type contains a list of declarations.
+	Defined custom recursion and induction principles.
+	Also changed the typing context to be a list of declarations.
+	(Currently the soundness wrt `evalF` is broken.)
+	See [LDef.v](LDef.v) and [LProps.v](LProps.v).
 
 
 To use this software:
@@ -37,7 +44,8 @@ The main files are:
 	- a `value_has_type` relation (`v ::: T`) that relates `(v : evalue)` instances 
 		and STLC types (`T : ty`);
 	- an `evaluates_to_a` relation (`t / g =>: T`) that says `evalF` on term `t` 
-		with runtime-context `g` will either run out of gas or yield a value of type `T`;
+		with runtime-context `g` will either run out of gas or 
+		yield a value of type `T`;
 	- other relations;
 	- lemmas for "inverting" the `value_has_type` function;
 	- lemmas for reasoning about contexts and lookup;
@@ -48,13 +56,26 @@ The main files are:
 
 - [LEProps3.v](LEProps3.v): This is an earlier attempt at soundness using an inductive 
 	relation for `value_has_type`. However, it ran into a problem with Coq's 
-	"Non strictly positive occurrence" error.  Using admitted (faked) lemmas to get around this
+	"Non strictly positive occurrence" error.  
+	Using admitted (faked) lemmas to get around this
 	problem, the soundness theorem goes through.  
+
+- [LDef.v](LDef.v): This started as SF's Stlc.v with non-essential material removed 
+	and the module renamed to LDEF.  Records have been added along with definitions
+	and declarations.  The typing context is now a list of declarations.
+
+	Note that this approach differs from that of SF's Records.v which "flattens"
+	records into the other elements, so a term can be a `trcons` of an identifier 
+	and two other terms.  Then they define a predicate, `well_formed_tm`, that
+	ensures that the second term of `trcons` is either `trnil` or another `trcons`.
+	The approach given here has `trcons` containing a list of identifier/term pairs,
+	with custom induction principles provided to make up for the 
+	weak ones defined automatically by Coq.
 
 Additional files are:
 
-- [LDef.v](LDef.v): Pierce's Stlc.v with non-essential material removed and module renamed to LDEF.
-- [LProps.v](LProps.v): Pierce's StlcProp.v.
+- [LProps.v](LProps.v): SF's StlcProp.v, modified for the changes to 
+  	LDef.v as described above.
 - [Tests.v](Tests.v): The examples factored out of Pierce's Stlc.v.
 - [Tests2.v](Tests2.v): Tests of the big-step evaluation relations of [LEval.v](LEval.v).
 

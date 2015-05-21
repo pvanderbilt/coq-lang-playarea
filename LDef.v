@@ -1,8 +1,7 @@
 (** * LDef: STLC with records (as lists). *)
 
 (** This file started out as SF's Records.v but has been modified to 
-    have records as lists of declarations. 
-    This is in contrast to SF's approach. *)
+    have records as lists of declarations (in contrast to SF's approach). *)
 
 Load Init.
 Require Export SfLib.
