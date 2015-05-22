@@ -25,7 +25,7 @@ Module LDEF.
            | t.i                         projection
            | if tb then te else tf       conditional
        T ::=                          Types:
-           | X                           type variable (not used)
+           | X                           base type (not used)
            | Bool                        boolean type
            | T1 -> T2                    function type
            | {L1; ...; Ln}               record type
@@ -72,7 +72,7 @@ with def : Type :=
     thing applies to terms.
 
     Instead, we use a list of declarations and fix the induction 
-    principle.  Similarly, record terms will be lists of definitions.
+    principle.  Similarly, record terms are lists of definitions.
 *)
 
 (** *** "Case" tactic notations *)
@@ -146,50 +146,13 @@ Proof with auto.
   intros. unfold add_vdecl, lookup_vdecl. destruct (eq_id_dec x2 x1)...
 Qed.
 
-(* TBD: Try some of these attempts at making the above more generic:
-
-Definition lookup_generic {T U : Type} 
-    (extrf : T -> option U) (xs : list T) : option U := 
-  match xs with 
-    | nil => None
-    | x :: xs' => 
-      match extrf x with
-        | None => lookup_generic extrf xs'
-        | Some v => Some v
-      end
-  end.
-
-Definition vdef_xf (x : id) (vd : def) : option tm :=
-  match vd with 
-    | (Vd y t) => if id_eq_dec x y then Some t else None
-    | _ => None
-  end.
-Definition lookup_vdef x Fs := lookup_generic (vdef_xf x) Fs.
-
-Definition unapply_vdef (vd : vdef) : option (id * tm) :=
-  match vd with (Fv y t) => Some (y, t) | _ => None end.
-  
-Definition lookup_gen {T U : Type} (unapplyf : T -> option (id * U)) 
-    (x : id) (ts : list T) : option U :=
-  match ts with
-    | nil => None
-    | t : ts' => 
-      match unapplyf t with
-        | Some (y v) => 
-            if id_eq_dec x y then Some v else lookup_gen unapplyf x ts'
-        | None => lookup_gen unapplyf x ts'
-      end
-  end.
-Definition lookup_vdef := lookup_gen unapply_vdef.
-*)
-
 
 (* ###################################################################### *)
 (** ** Custom recursion principles. *)
 
-(** *** Recursion on types, [ty_nested_rect]
+(** *** Extended recursion on types, [ty_xrect]
 
-    The coq-generated recursion function has the following type:
+    The coq-generated recursion principle for types ([ty]) has the following type:
 << 
   ty_rect : 
     forall P : ty -> Type,
@@ -200,8 +163,12 @@ Definition lookup_vdef := lookup_gen unapply_vdef.
     forall t : ty, P t
 >>
 
-    The following custom recursion function replaces the last case 
-    (a proof of [P (TRcd r)] given only that [r : list decl])
+    Notice that the "step" function for records has type
+    [forall r : list decl, P (TRcd r))], 
+    which does not provide recursive applications for the [ty] values within the
+    list of declarations.
+    
+    The following custom recursion principle replaces the records case 
     with four:
       - an additional proposition function [Q] over [list decl] (at the top),
       - a proof that for record body type, [Trb], [Q Trb] implies [P (TRcd Trb)],
@@ -213,24 +180,8 @@ Definition lookup_vdef := lookup_gen unapply_vdef.
     The primed version should be the same thing using match expressions.
 *)
 
-Definition ty_nested_rect
-  (P: ty -> Type) 
-  (Q: list decl -> Type)
-    (fTBase : forall x : id, P (TBase x))
-    (fTBool : P (TBool))
-    (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
-    (fTRcd' : forall Trb : list decl, Q Trb -> P (TRcd Trb))
-      (fTRcd_nil' : Q nil)
-      (fTRcd_cons' : forall (x : id) (T : ty) (Trb : list decl), 
-                       P T -> Q Trb -> Q ((Lv x T) :: Trb))
-  : forall T : ty, P T
-  := fix F (T : ty) : P T :=
-    let fTRcd_cons b Trb := 
-      match b with (Lv x T) => fTRcd_cons' x T Trb (F T) end
-    in let fTRcd Trb := fTRcd' Trb (list_rect Q fTRcd_nil' fTRcd_cons Trb)
-    in ty_rect P fTBase fTBool fTArrow fTRcd T.
 
-Definition ty_nested_rect'
+Definition ty_xrect
   (P: ty -> Type) 
   (Q: list decl -> Type)
     (fTBase : forall x : id, P (TBase x))
@@ -254,62 +205,16 @@ Definition ty_nested_rect'
        | TRcd Trb => fTRcd' Trb (G Trb)
      end.
 
-(* An attempt to do it as a Lemma, but the lack of a good IH kills it.
 
-Lemma ty_nested_rect'' :
-  forall 
-    (P: ty -> Type) 
-    (Q: list decl -> Type),
-    (forall x : id, P (TBase x)) ->
-    (forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2)) ->
-    (forall Trb : list decl, Q Trb -> P (TRcd Trb)) ->
-      (Q nil) ->
-      (forall (x : id) (T : ty) (Trb : list decl), 
-           P T -> Q Trb -> Q ((x, T) :: Trb)) ->
-  forall T : ty, P T.
-Proof.
-  intros P Q Hbase Harrow Hrcd Hnil Hcons T.
-  T_cases (induction T) Case; auto.
-    Case "TRcd". (* no IH *) apply Hrcd. induction a; auto.
-      SCase "cons". destruct a as [x T]. apply Hcons. (* Can't prove P T *)
-Abort All.
+
+(** *** Extended recursion on terms, [tm_xrect]
+
+    Here is the extended recursion principle for terms [tm].
+    This version directly delegates to the recursion principles for
+    lists and terms, [list_rect] and [tm_rect].
 *)
 
-(** It would be nice if one did not have to specify Q at the start, 
-    but rather when it comes up in the TRcd case. *)
-(*
-Definition ty_nested_rect_plus
-  (P: ty -> Type) 
-    (fTBase : forall x : id, P (TBase x))
-    (fTArrow : forall T1 : ty, P T1 -> forall T2 : ty, P T2 -> P (TArrow T1 T2))
-    (fTRcd : forall Trb : list decl, 
-      (exists (Q: list decl -> Type),
-              (Q nil) *
-              (forall (x : id) (T : ty) (Trb : list decl), 
-                       P T -> Q Trb -> Q ((x, T) :: Trb)) *
-              (forall Trb : list decl, (Q Trb) -> P (TRcd Trb)) ???
-      ) -> P (TRcd Trb))   
-  : forall T : ty, P T := admit.
-  := fix F (T : ty) : P T :=
-     let fix G (Trb : list decl) : Q Trb :=
-         match Trb with
-           | nil => fTRcd_nil'
-           | (x,T) :: Trb' => fTRcd_cons' x T Trb' (F T) (G Trb')
-         end
-     in match T with
-       | TBase x => fTBase x
-       | TArrow T1 T2 => fTArrow T1 (F T1) T2 (F T2)
-       | TRcd Trb => fTRcd' Trb (G Trb)
-     end.
-*)
-
-
-(** *** Recursion on terms, [tm_nested_rect]
-
-    This is similar to above, except that it is dealing with terms rather than types.
-*)
-
-Definition tm_nest_rect
+Definition tm_xrect
   (P: tm -> Type) 
   (Q: list def -> Type)
     (ftrue : P ttrue)
@@ -331,7 +236,7 @@ Definition tm_nest_rect
     in let frcd rb := frcd' rb (list_rect Q frcd_nil' frcd_cons rb)
     in tm_rect P ftrue ffalse fvar fapp fabs frcd fproj fif t.
 
-Tactic Notation "t_both_cases" tactic(first) ident(c) :=
+Tactic Notation "t_xcases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "ttrue" | Case_aux c "tfalse" 
   | Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
@@ -407,103 +312,7 @@ Proof.
 Qed.
 
 
-(**   Here is substitution defined using the custom recursion defined above.
-      However, I don't know how to use the match syntax with a custom 
-      recursion principle, so it's not easy to read.  Further, it simplifies 
-      into a mess that I can't fold back up, so we're not using this. *)
 
-Definition subst_ugly (x:id) (s:tm) :tm -> tm := 
-  tm_nest_rect (fun _ => tm) (fun _ => list def)
-    ttrue                                               (* ttrue *)
-    tfalse                                              (* tfalse *)
-    (fun y => if eq_id_dec x y then s else (tvar y))    (* tvar y *)
-    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                 (* tapp t1 t2 *)
-    (fun y T t1 mt1 =>                                  (* tabs y T t1 *)
-       tabs y T (if eq_id_dec x y then t1 else mt1))
-    (fun r mr => trcd mr)                               (* trcd r *)
-      (nil)                                               (* nil *)
-      (fun i t r mt mr => (Fv i mt) :: mr)                (* cons i t r *)
-    (fun t1 mt1 i => tproj mt1 i)                       (* tproj t1 i *)
-    (fun tb mtb tt mtt te mte => tif mtb mtt mte)       (* tif tb tt te *)
-    .
-
-(*
-Definition tm_rect_nest (P: tm -> Type) (Q: list def -> Type)
-  (fvar : forall i : id, P (tvar i))
-  (fapp : forall t : tm,
-        P t -> forall t0 : tm, P t0 -> P (tapp t t0))
-  (fabs : forall (i : id) (t : ty) (t0 : tm),
-        P t0 -> P (tabs i t t0))
-  (fproj : forall t : tm, P t -> forall i : id, P (tproj t i))
-  (frcd : forall a : list def, Q a -> P (trcd a))
-  (frcd_nil : Q nil)
-  (frcd_cons : forall (i : id) (t : tm) (a : list def), P t -> Q a -> Q (cons i t a))
- := fix F (t : tm) : P t := 
-  match t as t' return (P t') with
-    | tvar i => fvar i
-    | tapp t0 t1 => fapp t0 (F t0) t1 (F t1)
-    | tabs i t0 t1 => fabs i t0 t1 (F t1)
-    | tproj t0 i => fproj t0 (F t0) i
-    | trcd r => let frcd_cons' := (fun i y r' => frcd_cons i y r' (F y) )
-      in frcd r (alist_rect tm Q frcd_nil frcd_cons' r)
-  end.
- *)
-
-
-
-(* Some other stuff: *)
-
-Fixpoint alist_all {T : Type} (P : T-> Prop) (a: alist T) : Prop :=
-  match a with
-    | nil => True
-    | (i, t) :: r => P t /\ alist_all P r
-  end.
-
-Definition tm_rect_nest_map
-  (ftrue : tm)
-  (ffalse : tm)
-  (fvar : id -> tm)
-  (fapp : tm -> tm -> tm -> tm -> tm)
-  (fabs : id -> ty ->  tm -> tm -> tm)
-  (fproj : tm -> tm -> id -> tm)
-  (fif : tm -> tm -> tm -> tm -> tm -> tm -> tm)
- := tm_nest_rect
-      (fun _ => tm)  (fun _ => list def) ftrue ffalse fvar fapp fabs
-      (fun r mr => trcd mr) nil (fun i t r mt mr => (Fv i mt) :: mr) fproj fif.
-
-
-Definition subst'' (x:id) (s:tm) : tm -> tm := 
-  tm_rect_nest_map
-    ttrue
-    tfalse
-    (fun y => if eq_id_dec x y then s else (tvar y))
-    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)
-    (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1))
-    (fun t1 mt1 i => tproj mt1 i)
-    (fun tb mtb tt mtt te mte => tif mtb mtt mte).
-
-(*
-Example subst''_ok :substf_ok subst''.
-Proof. unfold substf_ok. repeat split. Qed.
-*)
-
-Definition tm_id : tm -> tm := 
-  tm_nest_rect (fun _ => tm) (fun _ => list def)
-    ttrue 
-    tfalse
-    (fun y => tvar y)
-    (fun t1 mt1 t2 mt2 => tapp t1 t2)
-    (fun y T t1 mt1 =>  tabs y T t1)
-    (fun r mr => trcd r)
-    (nil)
-    (fun i t r mt mr => (Fv i t) :: r)
-    (fun t1 mt1 i => tproj t1 i)
-    (fun tb mtb tt mtt te mte => tif tb tt te).
-(*
-Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
-    =  (tapp (tvar f) (tvar a)).
-Proof. reflexivity. Qed.
-*)
 
 (* ###################################################################### *)
 
@@ -762,12 +571,12 @@ Tactic Notation "rcd_has_type_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "TR_Nil" | Case_aux c "TR_Cons" ].
 
-(** *** Custom induction principle for typing *)
+(** *** Custom induction principle for [has_type] *)
 
-Scheme has_type_ind_both := Minimality for has_type Sort Prop
-with rcd_has_type_ind_both := Minimality for rcd_has_type Sort Prop.
+Scheme has_type_xind := Minimality for has_type Sort Prop
+with rcd_has_type_xind := Minimality for rcd_has_type Sort Prop.
 
-Tactic Notation "has_type_both_cases" tactic(first) ident(c) :=
+Tactic Notation "has_type_xcases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "T_Var" | Case_aux c "T_Abs" | Case_aux c "T_App"
   | Case_aux c "T_Rcd" | Case_aux c "T_Proj" 

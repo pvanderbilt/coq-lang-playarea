@@ -31,20 +31,15 @@ Lemma canonical_forms_fun : forall t T1 T2,
   exists x u, t = tabs x T1 u.
 Proof.
   intros t T1 T2 HT HVal. 
-    (* manual version:
-    inversion HVal; subst; clear HVal.
-      inversion HT; subst; clear HT. exists x0. exists t0.  auto.
-      inversion HT. 
-      inversion HT. 
-  my version:*)
   inversion HVal; subst; inversion HT; subst; clear HVal HT.
-  (* inversion HVal; intros; subst; try inversion HT; subst; auto. -- original *)
   exists x t12.  auto.
 Qed.
    
 
 (* #################################### *)
 (** *** Record Field Lookup *)
+(** If [rb *: Trb] and [Trb] has [x:Tx],
+    then [rb] has [x=vx] such that [vx:Tx]. *)
 
 Lemma rcd_field_lookup : 
   forall rb Trb x Tx,
@@ -84,11 +79,11 @@ Proof with eauto.
   intros t T Ht.
   remember (empty) as Gamma.
   generalize dependent HeqGamma.
-  Ltac p_ind_tactic Ht := induction Ht using has_type_ind_both
+  Ltac p_ind_tactic Ht := induction Ht using has_type_xind
     with (P0 := fun G tr Tr => 
        G = empty -> 
        value_rcd tr \/ (exists tr', tr *==> tr')).
-  has_type_both_cases (p_ind_tactic Ht) Case; intros HeqGamma; subst; 
+  has_type_xcases (p_ind_tactic Ht) Case; intros HeqGamma; subst; 
     try (left; auto; fail).
      (* the [try  (left; auto; fail)] tactic handles the value cases 
       (T_Abs, T_True, T_False, TR_Nil) *)
@@ -229,18 +224,19 @@ Definition closed (t:tm) :=
   forall x, ~ appears_free_in x t.
 
 (** *** If [x] is free in typable [t], it must be defined by the context. *)
+
 Lemma free_in_context : forall x t T Gamma,
    appears_free_in x t ->
    Gamma |- t \in T ->
    exists T',  lookup_vdecl x Gamma = Some T'.
 Proof with eauto.
   intros x t T Gamma Hafi Htyp.
-  Ltac fic_ind_tactic H x := induction H using has_type_ind_both with 
+  Ltac fic_ind_tactic H x := induction H using has_type_xind with 
     (P0 := fun Gamma r RS => 
       appears_free_in_rcd x r ->
       Gamma |- r *\in RS ->
       exists T', lookup_vdecl x Gamma = Some T').
-  has_type_both_cases (fic_ind_tactic Htyp x) Case; 
+  has_type_xcases (fic_ind_tactic Htyp x) Case; 
     inversion Hafi; subst...
   Case "T_Abs".
     destruct IHHtyp as [T' Hctx]... exists T'.
@@ -249,6 +245,7 @@ Proof with eauto.
 Qed.
 
 (** *** If a term is typable in the empty context it must be closed. *)
+
 Corollary typable_empty__closed : forall t T, 
     empty |- t \in T  ->
     closed t.
@@ -260,8 +257,8 @@ Qed.
 
 (** *** Context Invariance theorem *)
 (** If [Gamma] and [Gamma]' agree on all free variables of a term [t],
-    the type of [t] is the same for both contexts.
-*)
+    the type of [t] is the same for both contexts. *)
+
 Lemma context_invariance : forall Gamma Gamma' t S,
      Gamma |- t \in S  ->
      (forall x, appears_free_in x t -> 
@@ -269,13 +266,13 @@ Lemma context_invariance : forall Gamma Gamma' t S,
      Gamma' |- t \in S.
 Proof with eauto 15.
   intros. generalize dependent Gamma'.
-  Ltac ci_ind_tactic H := induction H using has_type_ind_both with 
+  Ltac ci_ind_tactic H := induction H using has_type_xind with 
     (P0 := fun Gamma r RS => 
       forall Gamma' : context,
       (forall x : id, appears_free_in_rcd x r -> 
                       lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
       Gamma' |- r *\in RS).
-  has_type_both_cases (ci_ind_tactic H) Case; intros Gamma' Heqv...
+  has_type_xcases (ci_ind_tactic H) Case; intros Gamma' Heqv...
   Case "T_Var".
     apply T_Var... rewrite <- Heqv...
   Case "T_Abs".
@@ -301,12 +298,12 @@ Proof with eauto 15.
      from the IHs, with the exception of tvar and tabs, which
      aren't automatic because we must reason about how the
      variables interact. *)
-  Ltac spt_induction t x v U := induction t using tm_nest_rect with 
+  Ltac spt_induction t x v U := induction t using tm_xrect with 
     (Q := fun r =>
       forall (RT : list decl) (Gamma : context),
         add_vdecl x U Gamma |- r *\in RT -> 
         Gamma |- (subst_rcd x v r) *\in RT).
-  t_both_cases (spt_induction t x v U) Case; 
+  t_xcases (spt_induction t x v U) Case; 
     intros S Gamma Htypt; simpl; inverts Htypt...
 
   Case "tvar".
@@ -403,12 +400,12 @@ Proof with eauto.
   (* Proof: By induction on the given typing derivation.  Many cases are
      contradictory ([T_Var], [T_Abs]) or follow directly from the IH
      ([T_RCons]).  We show just the interesting ones. *)
-  Ltac pres_ind_tactic HT := induction HT using has_type_ind_both
+  Ltac pres_ind_tactic HT := induction HT using has_type_xind
     with (P0 := fun Gamma tr Tr => forall tr' : list def,
        Gamma = empty -> 
        tr *==> tr' ->
        Gamma |- tr' *\in Tr).
-  has_type_both_cases (pres_ind_tactic HT) Case;
+  has_type_xcases (pres_ind_tactic HT) Case;
     introv HeqGamma HE; subst; inverts HE... 
 
   Case "T_App".
@@ -469,14 +466,13 @@ Corollary soundness : forall t t' T,
 Proof.
   intros t t' T Hhas_type Hmulti. unfold stuck.
   intros [Hnf Hnot_val]. unfold normal_form in Hnf.
-  induction Hmulti as [ x | x y z ].
+  induction Hmulti as [ x | x y z Hxy].
     Case "multi_refl: x==>x". 
-      apply progress in Hhas_type. destruct Hhas_type; auto.
+      (* The progress theorem says that this can't happen *)
+      destruct (progress _ _ Hhas_type); auto.
     Case "multi_step: x==>y, y==>*z". 
       apply IHHmulti; try assumption.
-      eapply preservation.
-        apply Hhas_type.
-        assumption.
+      apply (preservation _ _ _ Hhas_type Hxy).
 Qed.
 
 End LProps.

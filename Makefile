@@ -1,4 +1,5 @@
-MODULES := Common Utils LDef LProps OLDef OLProps LEval LEProps LEProps3 Tests Tests2 TestsR
+MODULES := Common Utils LDef LProps LEval LEProps LEProps3 \
+           Tests Tests2 TestsR Experiments OLDef OLProps
 VS      := $(MODULES:%=%.v)
 PSF			:= ../../Coq/pierce_software_foundations_3.2
 
