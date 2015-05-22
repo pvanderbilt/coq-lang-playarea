@@ -174,12 +174,7 @@ Qed.
       - a proof that for record body type, [Trb], [Q Trb] implies [P (TRcd Trb)],
       - a proof of [Q nil] and
       - a proof that [P T] and [Q Trb] implies [Q (cons x T Trb))]
-
-    The definition may be a little hard to follow, as it is using the 
-    coq-generated [ty_rect] and [list_rect].  
-    The primed version should be the same thing using match expressions.
 *)
-
 
 Definition ty_xrect
   (P: ty -> Type) 
@@ -261,11 +256,11 @@ Reserved Notation "'[' x ':=' s ']' t" (at level 20).
 Reserved Notation "'[' x ':=' s ']*' r" (at level 20).
 
 Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
-  let rsubst := (fix rsubst  (a: list def) : list def := 
+  let fix rsubst (a: list def) : list def := 
     match a with
       | nil => nil 
       | (Fv i t) :: r' => (Fv i ([x:=s] t)) :: (rsubst r')
-    end)
+    end
   in
   match t with
     | ttrue => ttrue
@@ -456,7 +451,7 @@ Tactic Notation "normalize" :=
              [ (eauto 10; fail) | (instantiate; simpl)]);
    apply multi_refl.
 
-(** verbose version: *)
+(* Verbose version: *)
 
 Tactic Notation "print_goal" := match goal with |- ?x => idtac x end.
 Tactic Notation "normalize_v" := 
@@ -571,7 +566,7 @@ Tactic Notation "rcd_has_type_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "TR_Nil" | Case_aux c "TR_Cons" ].
 
-(** *** Custom induction principle for [has_type] *)
+(** *** Extended induction principle for [has_type] *)
 
 Scheme has_type_xind := Minimality for has_type Sort Prop
 with rcd_has_type_xind := Minimality for rcd_has_type Sort Prop.

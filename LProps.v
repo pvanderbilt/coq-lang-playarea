@@ -179,7 +179,7 @@ Qed.
 
 (* ###################################################################### *)
 (** ** Subsitution preserves typing *)
-(** *** Definition of _free_ varaible *)
+(** *** Definition of a variable being _free_ *)
 
 Inductive appears_free_in : id -> tm -> Prop :=
   | afi_var : forall x,
@@ -223,7 +223,9 @@ Hint Constructors appears_free_in appears_free_in_rcd.
 Definition closed (t:tm) :=
   forall x, ~ appears_free_in x t.
 
-(** *** If [x] is free in typable [t], it must be defined by the context. *)
+(** *** Lemma [free_in_context]
+
+If [x] is free in typable [t], it must be defined by the context. *)
 
 Lemma free_in_context : forall x t T Gamma,
    appears_free_in x t ->
@@ -244,7 +246,7 @@ Proof with eauto.
     rewrite neq_id in Hctx... 
 Qed.
 
-(** *** If a term is typable in the empty context it must be closed. *)
+(**  If a term is typable in the empty context it must be closed. *)
 
 Corollary typable_empty__closed : forall t T, 
     empty |- t \in T  ->
@@ -445,7 +447,6 @@ Proof with eauto.
     rewrite H4 in Hlxr. inversion Hlxr...
 
 Qed.
-(** [] *)
 
 (* ###################################################################### *)
 (** ** Type Soundness *)
