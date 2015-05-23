@@ -2,8 +2,7 @@
 
 (** This file contains Pierce's examples taken from Stlc.v. *)
 
-Add LoadPath  "~/Polya/coq/pierce_software_foundations_3.2".
-
+Load Init.
 Require Export LDef.
 Import LDEF.
 
@@ -119,7 +118,7 @@ Proof.
   apply multi_refl.  Qed. 
 
 
-(** A more automatic proof *)
+(** A more automatic proof using [normalize] as defined in LDef.v *)
 
 Lemma step_example1' :
   (tapp idBB idB) ==>* idB.
@@ -184,7 +183,7 @@ Example typing_example_2 :
        (tabs y (TArrow TBool TBool)
           (tapp (tvar y) (tapp (tvar y) (tvar x))))) \in
     (TArrow TBool (TArrow (TArrow TBool TBool) TBool)).
-Proof with auto using extend_eq.
+Proof with auto using lookup_add_vdecl_eq.
   apply T_Abs.
   apply T_Abs.
   eapply T_App. apply T_Var...
@@ -205,15 +204,16 @@ Proof.
   (* FILLED IN *)
   apply T_Abs.
   apply T_Abs.
-  apply T_App with (T11:=TBool). apply T_Var. apply extend_eq.
-  apply T_App with TBool. apply T_Var. apply extend_eq.
-  apply T_Var. apply extend_neq. unfold not. intro HP. inversion HP. 
+  apply T_App with (T1:=TBool). apply T_Var. apply lookup_add_vdecl_eq.
+  apply T_App with TBool. apply T_Var. apply lookup_add_vdecl_eq.
+  apply T_Var. apply lookup_add_vdecl_neq. unfold not. intro HP. inversion HP. 
 Qed.
-(* Why is not "apply extend_eq" needed in the last line? *)
+(* Why is not "apply lookup_add_vdecl_eq" needed in the last line? *)
 (* As discovered below, "reflexivity" can be used after "apply T_Var".  
     I leave this as a way to deal with contexts that are not gound. *)
 (** [] *)
 
+(*
 Lemma extend_neq' : forall A (ctxt: partial_map A) x1 T2 x2 R,
   x2 <> x1 ->
   ctxt x1 = R ->
@@ -221,6 +221,7 @@ Lemma extend_neq' : forall A (ctxt: partial_map A) x1 T2 x2 R,
 Proof.
   intros. unfold extend. rewrite neq_id; auto.
 Qed.
+*)
 
 Example typing_example_2_full' :
   forall (ctxt : context),
@@ -234,9 +235,9 @@ Proof.
   intro.
   apply T_Abs.
   apply T_Abs.
-  apply T_App with (T11:=TBool). apply T_Var. apply extend_eq.
+  apply T_App with (T1:=TBool). apply T_Var. apply lookup_add_vdecl_eq.
   apply T_App with TBool. apply T_Var. reflexivity. (* it DOES work. *)
-  apply T_Var. apply extend_neq'. discriminate. apply extend_eq.
+  apply T_Var. apply lookup_add_vdecl_neq. discriminate.
 Qed.
 
 
@@ -291,7 +292,7 @@ Proof.
   inversion H4. subst. clear H4.
   inversion H2. subst. clear H2.
   inversion H5. subst. clear H5.
-  (* rewrite extend_neq in H1. rewrite extend_eq in H1. *)
+  (* rewrite lookup_add_vdecl_neq in H1. rewrite lookup_add_vdecl_eq in H1. *)
   inversion H1.  Qed.
 
 (** (Exercie) Another nonexample:
@@ -313,8 +314,7 @@ Proof.
   inversion H2; subst; clear H2.
   inversion H4; subst; clear H4.
   rewrite H1 in H2. inversion H2. clear H1 H2.
-  induction T11. 
-    inversion H0. 
-    inversion H0. apply IHT11_1. rewrite H2. apply H1.
+  induction T1; inversion H0. 
+    apply IHT1_1. rewrite H2. apply H1.
 Qed.
 

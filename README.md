@@ -1,35 +1,51 @@
 # coq-lang-playarea
-A repository for experimenting with Coq and programming language properties.
+STLC in Coq extended with a sound big-step semantics, functions as closures and records as lists.
 
-The current experiment is to prove the soundness of a big-step semantics for Pierce's
-version of STLC.  This semantics is based on an `evalF` function that uses a
-runtime context (a mapping identifiers to values), function closures and a
-return type that has normal return, "no gas" and "stuck" alternatives.  In this
-context, I define soundness to mean that a well-typed term does not get stuck.
-I believe I have accomplished this, see [LEProps.v](LEProps.v).
+This project starts with Software Foundation's ("SF's") simply typed lambda calculus (STLC) 
+as defined in Coq and extends it in various ways:
+
+- Added a big-step semantics in the form of an `evalF` function that uses a
+	runtime context, function closures and a
+	return type that has normal return, "no gas" and "stuck" alternatives.
+	See [LEval.v](LEval.v)
+
+- Proved soundness wrt `evalF`: on a well-typed term, `evalF` does not get stuck.
+	See [LEProps.v](LEProps.v).
+
+- Added records as lists, where a record term contains a list of definitions
+	and a record type contains a list of declarations.
+	Defined custom recursion and induction principles.
+	Also changed the typing context to be a list of declarations.
+	(Currently the soundness wrt `evalF` is broken.)
+	See [LDef.v](LDef.v) and [LProps.v](LProps.v).
+
 
 To use this software:
 
 - Obtain the Coq interactive theorem prover [here](https://coq.inria.fr/download).
 
-- Obtain Pierce's "Software Foundations" 
+- Obtain the "Software Foundations" library (by Pierce et. al.)
 	[sf.tar.qz](http://www.seas.upenn.edu/~bcpierce/sf/current/sf.tar.gz),
-	unpack it someplace and change the `LoadPath` lines of each .v file.
+	unpack it someplace and change the `LoadPath` line of `Init.v` and the `PSF`
+	variable in `Makefile` to its location.
 
 The main files are:
 
 - [LEval.v](LEval.v): Contains the definitions of the `eval` relation and `evalF` function;
-	the latter is the key one. It also defines association lists, an `evalue` type, 
-	and runtime contexts.
+	the latter is the key one. It also defines `alists` (association lists), 
+	an `evalue` type (of values produced by `evalF`), 
+	and runtime contexts (alists of `evalues`).
 
 - [LEProps.v](LEProps.v): The main content is a proof that `evalF`, 
 	when applied a well-typed term, either yields a value of that type 
-	or "runs out of gas"; it does not get stuck.  Soundness, as defined above, follows directly.
+	or "runs out of gas"; it does not get stuck.  
+	Soundness, as defined above, follows directly.
 	This file also defines:
 	- a `value_has_type` relation (`v ::: T`) that relates `(v : evalue)` instances 
 		and STLC types (`T : ty`);
 	- an `evaluates_to_a` relation (`t / g =>: T`) that says `evalF` on term `t` 
-		with runtime-context `g` will either run out of gas or yield a value of type `T`;
+		with runtime-context `g` will either run out of gas or 
+		yield a value of type `T`;
 	- other relations;
 	- lemmas for "inverting" the `value_has_type` function;
 	- lemmas for reasoning about contexts and lookup;
@@ -40,13 +56,26 @@ The main files are:
 
 - [LEProps3.v](LEProps3.v): This is an earlier attempt at soundness using an inductive 
 	relation for `value_has_type`. However, it ran into a problem with Coq's 
-	"Non strictly positive occurrence" error.  Using admitted (faked) lemmas to get around this
+	"Non strictly positive occurrence" error.  
+	Using admitted (faked) lemmas to get around this
 	problem, the soundness theorem goes through.  
+
+- [LDef.v](LDef.v): This started as SF's Stlc.v with non-essential material removed. 
+	Records have been added along with definitions
+	and declarations.  The typing context is now a list of declarations.
+
+	Note that this approach to records differs from that of SF's Records.v which "flattens"
+	records into the other elements, so, for example, a term could be `(trcons x ttrue tfalse)`,
+	which does not make sense. To deal with this, they define a predicate, `well_formed_tm`, that
+	ensures that the final term of `trcons` is either `trnil` or another `trcons`.
+	The approach given here has `trcons` containing a list of identifier/term pairs,
+	with custom induction principles provided to make up for the 
+	weak ones defined automatically by Coq.
 
 Additional files are:
 
-- [LDef.v](LDef.v): Pierce's Stlc.v with non-essential material removed and module renamed to LDEF.
-- [LProps.v](LProps.v): Pierce's StlcProp.v.
+- [LProps.v](LProps.v): SF's StlcProp.v, modified for the changes to 
+  	LDef.v as described above.
 - [Tests.v](Tests.v): The examples factored out of Pierce's Stlc.v.
 - [Tests2.v](Tests2.v): Tests of the big-step evaluation relations of [LEval.v](LEval.v).
 

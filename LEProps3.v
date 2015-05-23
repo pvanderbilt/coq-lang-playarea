@@ -6,13 +6,12 @@
     To get around this, lemmas are defined to fake the desired definition
     and a proof goes through.*)
 
-Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export LDef LEval.
-Import LDEF.
-Import LEVAL.
+Require Export Common LDef LEval.
+Import P3Common LDEF LEVAL.
 
 Module LEProps3.
 
@@ -70,15 +69,18 @@ Inductive value_has_type : evalue -> ty -> Prop :=
   | TV_False : vfalse ::: TBool
 
 with rtcontext_has_type: rctx -> context -> Prop :=
-  | TC_nil : anil :::* empty
-  | TC_cons : forall G g x v T, g :::* G -> v ::: T -> acons x v g :::* extend G x T
+  | TC_nil : nil :::* empty
+  | TC_cons : forall G g x v T, 
+                g :::* G -> v ::: T -> (aextend x v g) :::* add_vdecl x T G
 
 with evaluates_to_a : tm -> rctx ->  ty -> Prop := 
-   | TVE : forall t g T,  (forall n, result_ok (evalF t g n) T) -> (t / g =>: T)
+   | TVE : forall t g T,  
+             (forall n, result_ok (evalF t g n) T) -> (t / g =>: T)
 
 with result_ok : ef_return -> ty -> Prop :=
   | TR_NG : forall (T : ty), result_ok efr_nogas T
-  | TR_Norm : forall (vr : evalue) (T : ty),  vr ::: T ->  result_ok (efr_normal vr) T
+  | TR_Norm : forall (vr : evalue) (T : ty),  
+                vr ::: T ->  result_ok (efr_normal vr) T
 
 where "v ':::' T" := (value_has_type v T)
  and "g ':::*' G" := (rtcontext_has_type g G)
@@ -90,29 +92,30 @@ Hint Constructors value_has_type rtcontext_has_type evaluates_to_a result_ok.
 
 Lemma fake_vht_arrow_inversion:
   forall T1 T2 v, v ::: TArrow T1 T2 ->
-    exists xf tb gf, v = (vabs xf tb gf) /\ (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2).
+    exists xf tb gf, v = (vabs xf tb gf) /\ 
+                  (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2).
 Proof. admit. Qed.
 
 Lemma fake_TV_Abs:  
       forall (xf : id) (tb : tm) (gf : alist evalue) (T1 T2 : ty), 
-          (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2) ->
+          (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2) ->
           vabs xf tb gf ::: TArrow T1 T2.
 Proof. admit. Qed.
 
 
+(* Copies of lemmas from LEProps. *)
 
-(** ** lemmas, COPIED from LEProps1 because not in module *)
-
-Lemma ctxts_gx_then_alookup : 
+Lemma ctxts_agree_on_lookup : 
   forall (x : id) (G : context) (g : rctx) (T : ty),
     g  :::* G -> 
-    G x = Some T ->
+    lookup_vdecl x G = Some T ->
       exists v, alookup x g = Some v /\ v ::: T.
 Proof.
   introv Hctxts HGxT. induction Hctxts.
     Case "TC_nil". inversion HGxT.
-    Case "TC_cons". unfold extend in HGxT. destruct (eq_id_dec x0 x).
-      SCase "x=x0". inversion HGxT; subst; clear HGxT. exists v. split.
+    Case "TC_cons". unfold lookup_vdecl, add_vdecl in HGxT. 
+    destruct (eq_id_dec x0 x).
+      SCase "x0=x". subst. inverts HGxT. exists v. split.
         simpl. apply eq_id.
         assumption.
       SCase "x0<>x". apply IHHctxts in HGxT. clear IHHctxts.
@@ -121,15 +124,16 @@ Proof.
           assumption.
 Qed.
 
+
 Lemma ctx_tvar_then_some : forall G x T,
-  G |- (tvar x) \in T -> G x = Some T.
+  G |- (tvar x) \in T -> lookup_vdecl x G = Some T.
 Proof. introv H. inversion H. auto. Qed.
 
 Lemma ctx_tvar_then_alookup : forall G x T g,
   G |- (tvar x) \in T -> g :::* G -> 
     exists v, alookup x g = Some v /\ v ::: T.
 Proof. 
-  introv HG Hg. apply (ctxts_gx_then_alookup x G g T Hg). 
+  introv HG Hg. apply (ctxts_agree_on_lookup x G g T Hg). 
   apply ctx_tvar_then_some. assumption. 
 Qed.
 
@@ -187,7 +191,15 @@ Theorem evalF_soundness :
     G |- t \in T ->  g :::* G -> t / g  =>: T.
 Proof.
   (* introv Hty HGg. generalize dependent G. generalize dependent g. generalize dependent T. *)
-  t_cases (induction t as [ x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) Case; introv Hty HGg.
+  t_cases (induction t as [ | | x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) Case; introv Hty HGg.
+
+  Case "ttrue".
+    inverts Hty.
+    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. apply TR_Norm. apply TV_True.
+
+  Case "tfalse".
+    inverts Hty.
+    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. auto.
 
   Case "tvar". apply (ctx_tvar_then_evalsto G x T g Hty HGg).
 
@@ -198,12 +210,12 @@ Proof.
     assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
     assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
     (* use the [let_val] lemmas with Ht1 and Ht2 to decompose the two LETRT forms *)
-    apply (let_val t1 g n' _ _ (TArrow T11 T) T Hev Ht1). clear Hev Ht1. 
+    apply (let_val t1 g n' _ _ (TArrow T1 T) T Hev Ht1). clear Hev Ht1. 
     intros v1 er1 Hv1 Hv1t erL2 HevL2.
     apply (let_val t2 g n' _ _ _ _ HevL2 Ht2). clear HevL2 Ht2.
     intros v2 er2 Hv2 Hv2t erf Hevf.
     (* Here:   [Hv1t : v1 ::: TArrow T11 T] & [Hv2t : v2 ::: T11] & [erf = match v1 with ... end]. *)
-    (* Invert Hv1t to get at the structure of v1 which gives [erf = evalF tb (acons xf v2 gf) n'].  
+    (* Invert Hv1t to get at the structure of v1 which gives [erf = evalF tb (aextend xf v2 gf) n'].  
         However, with the TV_Abs definition above, there is no information about tb, so we can't proceed.
         Instead, use the fake inversion lemma to see that it goes through. *)
     assert (Hex := (fake_vht_arrow_inversion _ _ _ Hv1t)); clear Hv1t;  (* BOGUS *)
@@ -223,13 +235,11 @@ Proof.
     apply (IHtb _ _ _ H4). apply (TC_cons _ _ _ va _ HGg Hva).
     (* apply (fun va Hva => IHtb _ _ _ H4 (TC_cons _ _ _ va _ HGg Hva)). *)
 
-  Case "ttrue".
-    inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. apply TR_Norm. apply TV_True.
+  Case "trcd".
+    admit. (* TBD *)
 
-  Case "tfalse".
-    inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. auto.
+  Case "tproj".
+    admit. (* TBD *)
 
   Case "tif".
     inverts Hty.

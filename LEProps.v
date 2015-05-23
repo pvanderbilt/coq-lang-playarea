@@ -4,13 +4,12 @@
       [value_has_type] rather than an inductive relation (as was done in earlier attempts).  
       It seems to be working!  *)
 
-Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export LDef LEval.
-Import LDEF.
-Import LEVAL.
+Require Export Common LDef LEval.
+Import P3Common LDEF LEVAL.
 
 Module LEProps.
 
@@ -42,7 +41,7 @@ Fixpoint value_has_type (v : evalue) (T : ty) {struct T} : Prop :=
     match er with
       | efr_normal vr => vr ::: T
       | efr_nogas     => True
-      | efr_stuck      => False
+      | efr_stuck     => False
     end
   in let evaluates_to_a (t : tm) (g : rctx) (T : ty) : Prop := 
     forall n, result_ok (evalF t g n) T
@@ -50,7 +49,7 @@ Fixpoint value_has_type (v : evalue) (T : ty) {struct T} : Prop :=
     | (TBool, vtrue) => True
     | (TBool, vfalse) => True
     | ((TArrow T1 T2), (vabs xf tb gf)) => 
-        forall va, va ::: T1 -> evaluates_to_a tb (acons xf va gf) T2
+        forall va, va ::: T1 -> evaluates_to_a tb (aextend xf va gf) T2
     | (_, _) => False
   end
 where "v ':::' T" := (value_has_type v T).
@@ -68,8 +67,9 @@ Notation "t '/' g '=>:' T" := (evaluates_to_a t g T)
     (at level 40, g at level 39).
 
 Inductive rtcontext_has_type: rctx -> context -> Prop :=
-  | TC_nil : anil :::* empty
-  | TC_cons : forall G g x v T, g :::* G -> v ::: T -> acons x v g :::* extend G x T
+  | TC_nil : nil :::* empty
+  | TC_cons : forall G g x v T, 
+                g :::* G -> v ::: T -> (aextend x v g) :::* (add_vdecl x T G)
 where "g ':::*' G" := (rtcontext_has_type g G).
 
 Hint Unfold value_has_type result_ok evaluates_to_a. 
@@ -85,38 +85,38 @@ Proof.
     simpl in Hvt. contradiction. 
     left. reflexivity.
     right.  reflexivity.
+    simpl in Hvt. contradiction. 
 Qed.
 
 Lemma fun_vals:
   forall T1 T2 v, v ::: TArrow T1 T2 ->
     exists xf tb gf, 
       v = (vabs xf tb gf) 
-      /\ (forall va, va ::: T1 -> tb / (acons xf va gf) =>: T2).
+      /\ (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2).
 Proof. 
-  intros T1 T2 v Hvt.  destruct v; simpl in Hvt.
+  intros T1 T2 v Hvt.  destruct v; simpl in Hvt; try contradiction.
     exists i t a. split. 
       reflexivity.
       intros va Hvat n. 
         specialize (Hvt va Hvat n). 
-        destruct (evalF t (acons i va a) n); unfold result_ok; auto.
-    contradiction.
-    contradiction.
+        destruct (evalF t (aextend i va a) n); unfold result_ok; auto.
 Qed.
 
 
 (** *** Lemmas for reasoning about contexts (runtime and typing). *)
 (* lemmas, COPIED from LEProps1 because not in module *)
 
-Lemma ctxts_gx_then_alookup : 
+Lemma ctxts_agree_on_lookup : 
   forall (x : id) (G : context) (g : rctx) (T : ty),
     g  :::* G -> 
-    G x = Some T ->
+    lookup_vdecl x G = Some T ->
       exists v, alookup x g = Some v /\ v ::: T.
 Proof.
   introv Hctxts HGxT. induction Hctxts.
     Case "TC_nil". inversion HGxT.
-    Case "TC_cons". unfold extend in HGxT. destruct (eq_id_dec x0 x).
-      SCase "x=x0". inversion HGxT; subst; clear HGxT. exists v. split.
+    Case "TC_cons". unfold lookup_vdecl, add_vdecl in HGxT. 
+    destruct (eq_id_dec x0 x).
+      SCase "x0=x". subst. inverts HGxT. exists v. split.
         simpl. apply eq_id.
         assumption.
       SCase "x0<>x". apply IHHctxts in HGxT. clear IHHctxts.
@@ -127,14 +127,14 @@ Qed.
 
 
 Lemma ctx_tvar_then_some : forall G x T,
-  G |- (tvar x) \in T -> G x = Some T.
+  G |- (tvar x) \in T -> lookup_vdecl x G = Some T.
 Proof. introv H. inversion H. auto. Qed.
 
 Lemma ctx_tvar_then_alookup : forall G x T g,
   G |- (tvar x) \in T -> g :::* G -> 
     exists v, alookup x g = Some v /\ v ::: T.
 Proof. 
-  introv HG Hg. apply (ctxts_gx_then_alookup x G g T Hg). 
+  introv HG Hg. apply (ctxts_agree_on_lookup x G g T Hg). 
   apply ctx_tvar_then_some. assumption. 
 Qed.
 
@@ -190,8 +190,16 @@ Theorem evalF_is_sound_yielding_T :
     G |- t \in T ->  g :::* G -> t / g  =>: T.
 Proof.
   (* introv Hty HGg. generalize dependent G. generalize dependent g. generalize dependent T. *)
-  t_cases (induction t as [ x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) 
+  t_cases (induction t as [ | | x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) 
       Case; introv Hty HGg.
+
+  Case "ttrue".
+    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
+    rewrite <- Hev. auto.
+
+  Case "tfalse".
+    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
+    rewrite <- Hev. auto.
 
   Case "tvar". apply (ctx_tvar_then_evalsto G x T g Hty HGg).
 
@@ -201,7 +209,7 @@ Proof.
     assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
     assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
     (* use the [let_val] lemmas with Ht1 and Ht2 to decompose the two LETRT forms *)
-    apply (let_val t1 g n' _ _ (TArrow T11 T) T Hev Ht1); clear Hev Ht1;
+    apply (let_val t1 g n' _ _ (TArrow T1 T) T Hev Ht1); clear Hev Ht1;
     intros v1 er1 Hv1 Hv1t erL2 HevL2.
     apply (let_val t2 g n' _ _ _ _ HevL2 Ht2); clear HevL2 Ht2;
     intros v2 er2 Hv2 Hv2t erf Hevf.
@@ -213,15 +221,13 @@ Proof.
   Case "tabs". 
     inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
     rewrite <- Hev. clear Hev. intros va Hvat n. 
-    apply (IHtb _ _ (acons x va g) H4 (TC_cons _ _ _ va _ HGg Hvat)).
+    apply (IHtb _ _ (aextend x va g) H4 (TC_cons _ _ _ va _ HGg Hvat)).
 
-  Case "ttrue".
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
-    rewrite <- Hev. auto.
+  Case "trcd".
+    admit. (* TBD! *)
 
-  Case "tfalse".
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
-    rewrite <- Hev. auto.
+  Case "tproj".
+    admit. (* TBD! *)
 
   Case "tif".
     inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
@@ -230,8 +236,7 @@ Proof.
     assert (Hte := IHt3 _ _ _ H6 HGg); clear IHt3 H6.
 
     specialize (Hti n'). destruct (evalF ti g n').
-       SCase "efr_normal vb". destruct e; simpl in Hti; subst er.
-          SSCase "e = (vabs ...)". contradiction.
+       SCase "efr_normal vb". destruct e; simpl in Hti; subst er; try contradiction.
           SSCase "e = vtrue".  apply (Htt n').
           SSCase "e = vfalse".  apply (Hte n').
       SCase "nogas". subst er. apply Hti.
