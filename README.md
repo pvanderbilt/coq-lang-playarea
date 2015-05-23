@@ -1,5 +1,5 @@
 # coq-lang-playarea
-STLC in Coq extended with a sound big-step semantics and functions as closures.
+STLC in Coq extended with a sound big-step semantics, functions as closures and records as lists.
 
 This project starts with Software Foundation's ("SF's") simply typed lambda calculus (STLC) 
 as defined in Coq and extends it in various ways:
@@ -60,14 +60,14 @@ The main files are:
 	Using admitted (faked) lemmas to get around this
 	problem, the soundness theorem goes through.  
 
-- [LDef.v](LDef.v): This started as SF's Stlc.v with non-essential material removed 
-	and the module renamed to LDEF.  Records have been added along with definitions
+- [LDef.v](LDef.v): This started as SF's Stlc.v with non-essential material removed. 
+	Records have been added along with definitions
 	and declarations.  The typing context is now a list of declarations.
 
-	Note that this approach differs from that of SF's Records.v which "flattens"
-	records into the other elements, so a term can be a `trcons` of an identifier 
-	and two other terms.  Then they define a predicate, `well_formed_tm`, that
-	ensures that the second term of `trcons` is either `trnil` or another `trcons`.
+	Note that this approach to records differs from that of SF's Records.v which "flattens"
+	records into the other elements, so, for example, a term could be `(trcons x ttrue tfalse)`,
+	which does not make sense. To deal with this, they define a predicate, `well_formed_tm`, that
+	ensures that the final term of `trcons` is either `trnil` or another `trcons`.
 	The approach given here has `trcons` containing a list of identifier/term pairs,
 	with custom induction principles provided to make up for the 
 	weak ones defined automatically by Coq.
