@@ -1,7 +1,7 @@
 (** * Common Definitions *)
 (** Data structures used by other modules. *)
 
-Require Init.
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
