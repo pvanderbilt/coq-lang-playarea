@@ -4,12 +4,12 @@
     defined in [LEval.v].
  *)
 
-Add LoadPath  "~/Polya/coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export Common RecordsExt LEval.
-Import P3Common Records LEVAL.
+Require Export Common LDef LEval.
+Import P3Common LDEF LEVAL.
 
 (* ###################################################################### *)
 (** ** Some definitions to use in testing *)

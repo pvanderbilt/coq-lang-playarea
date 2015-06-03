@@ -2,13 +2,12 @@
 
 (**  *)
 
-Add LoadPath "/Users/pv/Polya/Coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-(* Require Export Stlc. *)
-Require Export Common RecordsExt.
-Import P3Common Records.
+Require Export Common LDef.
+Import P3Common LDEF.
 
 Module RETests.
 
@@ -82,11 +81,11 @@ Proof.
   (* TBD: Figure out why eauto isn't taking the hints (above and before) *)
   eapply T_App.
     eapply T_Abs. eapply T_Proj.
-      eapply T_Var.  eapply extend_eq.
+      eapply T_Var.  eapply lookup_add_vdecl_eq.
       reflexivity. 
     eapply T_Rcd.
-      eapply TR_Cons. eapply T_Abs. eapply T_Var. eapply extend_eq.
-      eapply TR_Cons. eapply T_Abs. eapply T_Var. eapply extend_eq.
+      eapply TR_Cons. eapply T_Abs. eapply T_Var. eapply lookup_add_vdecl_eq.
+      eapply TR_Cons. eapply T_Abs. eapply T_Var. eapply lookup_add_vdecl_eq.
       eapply TR_Nil.
 Qed.
 
@@ -95,7 +94,7 @@ Qed.
 
 Example typing_nonexample : 
   ~ exists T,
-      (extend empty a (TRcd (cons (Lv i2 (TArrow A A)) nil)))  |-
+      (add_vdecl a (TRcd (cons (Lv i2 (TArrow A A)) nil)) empty)  |-
                (trcd (cons (Fv i1 (tabs a B (tvar a))) nil)) \in
                T.
   (* no T | a : { i2 : A->A } |- { i1 = λ a:B . a } : T *)
@@ -104,7 +103,7 @@ Proof.
 
 Example typing_nonexample_2 : forall y,
   ~ exists T,
-    (extend empty y A) |-
+    (add_vdecl y A empty) |-
            (tapp (tabs a (TRcd [(Lv i1 A)]) (tproj (tvar a) i1))
                  (trcd [(Fv i1 (tvar y)); (Fv i2 (tvar y))]) ) \in
            T.

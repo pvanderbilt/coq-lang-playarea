@@ -3,12 +3,12 @@
 (**  This file defines a "big-step" evaluation relation and function 
       for the language defined in LDef.v. *)
 
-Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-Require Export Common RecordsExt.
-Import P3Common Records.
+Require Export Common LDef.
+Import P3Common LDEF.
 
 Module LEVAL.
 

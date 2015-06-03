@@ -4,14 +4,12 @@
       [value_has_type] rather than an inductive relation (as was done in earlier attempts).  
       It seems to be working!  *)
 
-Add LoadPath "~/Polya/Coq/pierce_software_foundations_3.2".
+Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-(*Require Export Common LDef LEval.
-Import P3Common LDEF LEVAL.*)
-Require Export Common RecordsExt LEval.
-Import P3Common Records LEVAL.
+Require Export Common LDef LEval.
+Import P3Common LDEF LEVAL.
 
 Module LEProps.
 
