@@ -196,7 +196,29 @@ where "g ':::*' G" := (bindings_match_decls g G).
 Hint Constructors  bindings_match_decls.
 *)
 
-(** The next two aren't used:*)
+(** **** Constructor lemmas *)
+(** Lemmas that mimic the inductive constructors that would have 
+    been defined if Coq allowed us to define our relations that way. *)
+
+Lemma TV_True :
+  vtrue ::: TBool.
+Proof. reflexivity. Qed.
+
+Lemma TV_False :
+  vfalse ::: TBool.
+Proof. reflexivity. Qed.
+
+Lemma TV_Abs :
+  forall xf tb gf T1 T2,
+    (forall va,  va ::: T1 -> tb / (aextend xf va gf) =>: T2) ->
+    vabs xf tb gf ::: TArrow T1 T2.
+Proof. introv H. simpl. exact H. Qed.
+
+Lemma TV_Rcd : 
+  forall Fs Ls,
+    Fs :::* Ls ->
+    vrcd Fs ::: TRcd Ls.
+Proof. introv H. simpl. exact H. Qed.
 
 Lemma TC_nil :
   nil :::* nil.
@@ -209,6 +231,40 @@ Lemma TC_cons :
     (aextend x v g) :::* (add_vdecl x T G).
 Proof. auto.
   introv HgG HvT. simpl. auto. 
+Qed.
+
+Lemma TVE:
+  forall t g T,
+    (forall n er, evalF t g n = er -> result_ok er T) -> 
+    (t / g =>: T).
+Proof.
+  introv H. red. apply (fun n => H n (evalF t g n) eq_refl).
+Qed.
+
+Lemma TVE_inv:
+  forall t g T,
+    (t / g =>: T) -> 
+    (forall n er, evalF t g n = er -> result_ok er T).
+Proof.
+  intros t g T Hevto n er ?; subst er. apply Hevto.
+Qed.
+
+Lemma TR_Norm : 
+  forall v T er,
+    efr_normal v = er ->
+    v ::: T ->
+    result_ok er T.
+Proof.
+  introv Heq Ht. subst. simpl. exact Ht.
+Qed.
+
+Lemma TRL_Norm : 
+  forall Fs Ls xr,
+    efr_normal Fs = xr ->
+    Fs :::* Ls ->
+    result_list_ok xr Ls.
+Proof.
+  introv Heq Ht. subst. simpl. exact Ht.
 Qed.
 
 (* Not used: a version using [bmd_ind] but not [lookup_case]. *)
@@ -410,6 +466,7 @@ Proof.
       assumption.
 Qed.
 
+(** *** value_has_type redefined and its equivalence *)
 
 Fixpoint value_has_type' (v : evalue) (T : ty) {struct T} : Prop :=
   match (T, v) with
@@ -561,7 +618,8 @@ Proof.
   introv H. unfold execs_to_decls. apply (fun n' => H n' _ eq_refl).
 Qed.
 
-(** *** Lemmas for  reasoning about LETRT forms. *)
+
+(** *** Lemmas for reasoning about LETRT forms. *)
 
 Lemma let_val : 
   forall t1 g n' (f : evalue -> ef_return) erf T1 T2,
@@ -671,26 +729,23 @@ Proof.
   set (Q:=fun Fs : list def =>
           forall (G : context) (Ls : list decl) (g : rctx),
             G |- Fs *\in Ls ->  g :::* G -> Fs / g  =>:* Ls).
-  tm_xind_tactic t Q Case; introv Hty HGg.
+  tm_xind_tactic t Q Case; 
+    introv Hty HGg; inverts Hty; 
+    (apply evalF_parts || apply execF_list_parts);
+    intros n' er Hev; simpl in Hev; subst Q.
 
-  (*tm_xind_tactic t Q Case; introv Hty HGg.*)
-
-  Case "ttrue".
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
-    rewrite <- Hev. auto.
+  Case "ttrue". 
+    exact (TR_Norm _ _ _ Hev TV_True).
 
   Case "tfalse".
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
-    rewrite <- Hev. auto.
+    exact (TR_Norm _ _ _ Hev TV_False).
 
   Case "tvar". 
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
     destruct (ctxts_agree_on_lookup _ _ HGg _ _ H1) as [v [Hlk Hvt]].
-    rewrite Hlk in Hev; subst. apply Hvt. 
+    rewrite Hlk in Hev. exact (TR_Norm _ _ _ Hev Hvt).
     (* pre "inverts" : apply (ctx_tvar_then_evalsto G x T g Hty HGg).*)
 
   Case "tapp".
-    inverts Hty. apply evalF_parts. intros n' er Hev. simpl in Hev.
     (* use IHs to get [Ht1 : t1 / g =>: TArrow T11 T] & [Ht2 : t2 / g =>: T11].  *)
     assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
     assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
@@ -699,53 +754,46 @@ Proof.
     intros v1 er1 Hv1 Hv1t erL2 HevL2.
     apply (let_val t2 g n' _ _ _ _ HevL2 Ht2); clear HevL2 Ht2;
     intros v2 er2 Hv2 Hv2t erf Hevf.
-    assert (Hex := fun_vals _ _ _ Hv1t); clear Hv1t.
-    destruct Hex as (xf & tb & gf & Hv1eq & Hva). subst v1. 
-    specialize (Hva v2 Hv2t n'). clear Hv2t.
-    rewrite Hevf in Hva. apply Hva.
+    assert (Hex := fun_vals _ _ _ Hv1t); clear Hv1t;
+    destruct Hex as (xf & tb & gf & Hv1eq & Hva); subst v1. 
+    apply (TVE_inv _ _ _ (Hva v2 Hv2t) n' _ Hevf).
 
   Case "tabs". 
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
-    rewrite <- Hev. clear Hev. 
-    unfold result_ok, value_has_type. intros va Hvat n. 
-    apply (IHtb _ _ (aextend x va g) H4 (TC_cons _ _ _ _ _ HGg Hvat)).
+    apply (TR_Norm _ _ _ Hev); clear Hev.
+    apply TV_Abs; intros va Hvat.
+    apply (IHtb _ _ (aextend x va g) H4). clear IHtb.
+    apply (TC_cons _ _ _ _ _ HGg Hvat).
 
   Case "trcd". 
-    inverts Hty. apply evalF_parts; intros n' er Hev. simpl in Hev.
-    subst Q.
     rewrite <- (execs_to_decls_eqv Fs g n') in Hev.
     assert (HFs := IHFs _ _ _ H1 HGg); clear IHFs H1.
     apply (let_vlist _ g n' _ _ _ _ Hev HFs); clear Hev HFs;
-    intros bs er1 Hbs Hbst er2 Hev2; subst.  apply Hbst. 
+    intros bs er1 Hbs Hbst er2 Hev2. 
+    apply (TR_Norm _ _ _ Hev2 (TV_Rcd _ _ Hbst)).
 
   Case "trnil".
-    inverts Hty. apply execF_list_parts.  intros n' er Hev. simpl in Hev.
-    subst. apply TC_nil.
-    (* subst. reflexivity. *)
+    apply (TRL_Norm _ _ _ Hev TC_nil). 
 
   Case "trcons".
-    inverts Hty. apply execF_list_parts.  intros n' er Hev. simpl in Hev.
-   (* set (f1 : evalue -> efr_return := fun v => 
-      LETRT bs' <== execF_list Fs g n' IN efr_normal (aextend x v bs')).*)
     assert (Ht := IHt _ _ _ H4 HGg); clear IHt H4.
     assert (HFs := IHFs _ _ _ H5 HGg); clear IHFs H5.
-    apply (list_let_val t g n' _ _ T _ Hev Ht). clear Hev Ht;
-    intros v1 er1 Hv1 Hv1t erL2 HevL2. subst er1.
-    apply (list_let_vlist _ g n' _ _ Tr _ HevL2 HFs). clear HevL2 HFs;
-    intros bs2 er2 Hbs2 Hbs2t erf Hevf. subst.
-    unfold result_list_ok. apply (TC_cons _ _ _ _ _ Hbs2t Hv1t).
+    apply (list_let_val t g n' _ _ T _ Hev Ht); clear Hev Ht;
+    intros v1 er1 Hv1 Hv1t erL2 HevL2.
+    apply (list_let_vlist _ g n' _ _ Tr _ HevL2 HFs); clear HevL2 HFs;
+    intros bs2 er2 Hbs2 Hbs2t erf Hevf. 
+    apply (TRL_Norm _ _ _ Hevf).
+    apply (TC_cons _ _ _ _ _ Hbs2t Hv1t).
 
   Case "tproj". 
-    inverts Hty. apply evalF_parts; intros n' er Hev. simpl in Hev. 
     assert (Htr := IHtr _ _ _ H2 HGg); clear IHtr H2.
     apply (let_val tr g n' _ _ _ _ Hev Htr); clear Hev Htr; 
     intros vr err Hvr Hvrt erp Hevp.
-    destruct (rcd_vals _ _ Hvrt) as [bs [? HbsT ]]; subst.
+    destruct (rcd_vals _ _ Hvrt) as [bs [? HbsT ]]. subst vr.
     destruct (ctxts_agree_on_lookup _ _ HbsT _ _ H4) as [v [Hlk HvT]].
-    rewrite Hlk. apply HvT.
+    rewrite Hlk in Hevp. 
+    apply (TR_Norm _ _ _ Hevp HvT).
 
   Case "tif".
-    inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
     assert (Hti := IHti _ _ _ H3 HGg); clear IHti H3.
     apply (let_val ti g n' _ _ _ _ Hev Hti); clear Hev Hti;
     intros vi eri Hvi Hvit erc Hevc.
