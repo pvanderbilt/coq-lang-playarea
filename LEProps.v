@@ -114,14 +114,6 @@ Definition result_list_ok (er : xf_return) (Ls : list decl) : Prop :=
       | efr_stuck => False
     end.
 
-Fixpoint execF_list (Fs : list def) (g : rctx) (gas' : nat) : xf_return := 
-      match Fs with
-        | nil => efr_normal nil
-        | (Fv x t) :: Fs' =>
-            LETRT v <== evalF t g gas' IN
-              LETRT bs' <== execF_list Fs' g gas' IN 
-                efr_normal (aextend x v bs')
-      end.
 
 Definition execs_to_decls (Fs : list def) (g : rctx) (Ls : list decl) : Prop := 
     forall n', result_list_ok (execF_list Fs g n') Ls.
@@ -130,23 +122,6 @@ Notation "Fs '/' g '=>:*' Ls" := (execs_to_decls Fs g Ls)
 
 Hint Unfold value_has_type result_ok evaluates_to_a bindings_match_decls.
 
-Lemma execs_to_decls_eqv :
-  forall (Fs : list def) (g : rctx) (n' : nat),
-    execF_list Fs g n' = 
-    ((fix execF_list (Fs0 : list def) : xf_return :=
-           match Fs0 with
-           | nil => efr_normal nil
-           | Fv x t :: Fs' =>
-               LETRT v <== evalF t g n'
-               IN LETRT bs' <== execF_list Fs'
-                  IN efr_normal (aextend x v bs')
-           end) Fs).
-Proof.
-  intros. induction Fs as [ |F Fs'].
-    Case "Fs=[]". reflexivity.
-    Case "Fs=F::Fs'". simpl. destruct F as [x t].
-      rewrite <- IHFs'. reflexivity.
-Qed.
 
 
 (** A handy lemma for doing a form of induction over :::*.
@@ -710,17 +685,6 @@ Qed.
 (**  ** Proof of soundness of evalF *)
 (**  *** Proof of [evalF_is_sound_yielding_T] *)
 
-Ltac tm_ind_tactic t c := 
-  t_cases (induction t as 
-    [ | | x | t1 IHt1 t2 IHt2 | x Tx tb IHtb | Fs | tr IHtr x 
-    | ti IHti tt IHtt te IHte ] using tm_rect) c.
-  
-Ltac tm_xind_tactic t Qv C := 
-  t_xcases (induction t 
-    as [ | | x | t1 IHt1 t2 IHt2 | x Tx tb IHtb | Fs IHFs | | x t Fs IHt IHFs 
-         | tr IHtr x | ti IHti tt IHtt te IHte ]
-    using tm_xrect with (Q:=Qv)) C.
-
   
 Theorem evalF_is_sound_yielding_T : 
   forall (t : tm) (G : context) (T : ty) (g : rctx),
@@ -765,7 +729,7 @@ Proof.
     apply (TC_cons _ _ _ _ _ HGg Hvat).
 
   Case "trcd". 
-    rewrite <- (execs_to_decls_eqv Fs g n') in Hev.
+    rewrite <- (execF_list_eq Fs g n') in Hev.
     assert (HFs := IHFs _ _ _ H1 HGg); clear IHFs H1.
     apply (let_vlist _ g n' _ _ _ _ Hev HFs); clear Hev HFs;
     intros bs er1 Hbs Hbst er2 Hev2. 
@@ -777,7 +741,7 @@ Proof.
   Case "trcons".
     assert (Ht := IHt _ _ _ H4 HGg); clear IHt H4.
     assert (HFs := IHFs _ _ _ H5 HGg); clear IHFs H5.
-    apply (list_let_val t g n' _ _ T _ Hev Ht); clear Hev Ht;
+    apply (list_let_val tx g n' _ _ T _ Hev Ht); clear Hev Ht;
     intros v1 er1 Hv1 Hv1t erL2 HevL2.
     apply (list_let_vlist _ g n' _ _ Tr _ HevL2 HFs); clear HevL2 HFs;
     intros bs2 er2 Hbs2 Hbs2t erf Hevf. 

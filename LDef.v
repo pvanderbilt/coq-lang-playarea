@@ -75,7 +75,7 @@ with def : Type :=
     principle.  Similarly, record terms are lists of definitions.
 *)
 
-(** *** "Case" tactic notations *)
+(** *** "Case" tactic notations and [tm_ind_tactic]  *)
 
 Tactic Notation "T_cases" tactic(first) ident(c) :=
   first;
@@ -87,6 +87,12 @@ Tactic Notation "t_cases" tactic(first) ident(c) :=
   [ Case_aux c "ttrue" | Case_aux c "tfalse" 
   | Case_aux c "tvar" | Case_aux c "tapp" | Case_aux c "tabs"
   | Case_aux c "trcd" | Case_aux c "tproj"| Case_aux c "tif" ].
+
+Ltac tm_ind_tactic t C := 
+  t_cases (induction t as 
+    [ | | x | t1 IHt1 t2 IHt2 | x Tx tb IHtb | Fs | tr IHtr x 
+    | ti IHti tt IHtt te IHte ] using tm_rect) C.
+  
 
 
 (** *** Functions and lemmas for dealing with definition and declaration lists *)
@@ -231,6 +237,8 @@ Definition tm_xrect
     in let frcd rb := frcd' rb (list_rect Q frcd_nil' frcd_cons rb)
     in tm_rect P ftrue ffalse fvar fapp fabs frcd fproj fif t.
 
+(** *** [tm_xind_tactic] extended induction tactic *)
+
 Tactic Notation "t_xcases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "ttrue" | Case_aux c "tfalse" 
@@ -238,6 +246,11 @@ Tactic Notation "t_xcases" tactic(first) ident(c) :=
   | Case_aux c "trcd" | Case_aux c "trnil" | Case_aux c "trcons"
   | Case_aux c "tproj" | Case_aux c "tif" ].
 
+Ltac tm_xind_tactic t Qv C := 
+  t_xcases (induction t 
+    as [ | | ?x | ?t1 ?IHt1 ?t2 ?IHt2 | ?x ?Tx ?tb ?IHtb | ?Fs ?IHFs | | ?x ?tx ?Fs ?IHt ?IHFs 
+         | ?tr ?IHtr ?x | ?ti ?IHti ?tt ?IHtt ?te ?IHte ]
+    using tm_xrect with (Q:=Qv)) C.
 
 
 (* ###################################################################### *)
