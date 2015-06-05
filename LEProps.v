@@ -107,7 +107,47 @@ Fixpoint bindings_match_decls
     end.
 Notation "g ':::*' G" := (bindings_match_decls g G).
 
+Definition result_list_ok (er : xf_return) (Ls : list decl) : Prop :=
+    match er with
+      | efr_normal bs => bs :::* Ls
+      | efr_nogas => True
+      | efr_stuck => False
+    end.
+
+Fixpoint execF_list (Fs : list def) (g : rctx) (gas' : nat) : xf_return := 
+      match Fs with
+        | nil => efr_normal nil
+        | (Fv x t) :: Fs' =>
+            LETRT v <== evalF t g gas' IN
+              LETRT bs' <== execF_list Fs' g gas' IN 
+                efr_normal (aextend x v bs')
+      end.
+
+Definition execs_to_decls (Fs : list def) (g : rctx) (Ls : list decl) : Prop := 
+    forall n', result_list_ok (execF_list Fs g n') Ls.
+Notation "Fs '/' g '=>:*' Ls" := (execs_to_decls Fs g Ls) 
+    (at level 40, g at level 39).
+
 Hint Unfold value_has_type result_ok evaluates_to_a bindings_match_decls.
+
+Lemma execs_to_decls_eqv :
+  forall (Fs : list def) (g : rctx) (n' : nat),
+    execF_list Fs g n' = 
+    ((fix execF_list (Fs0 : list def) : xf_return :=
+           match Fs0 with
+           | nil => efr_normal nil
+           | Fv x t :: Fs' =>
+               LETRT v <== evalF t g n'
+               IN LETRT bs' <== execF_list Fs'
+                  IN efr_normal (aextend x v bs')
+           end) Fs).
+Proof.
+  intros. induction Fs as [ |F Fs'].
+    Case "Fs=[]". reflexivity.
+    Case "Fs=F::Fs'". simpl. destruct F as [x t].
+      rewrite <- IHFs'. reflexivity.
+Qed.
+
 
 (** A handy lemma for doing a form of induction over :::*.
     Use it with the [refine] tactic.
@@ -513,8 +553,15 @@ Proof.
     apply (H n' _ eq_refl).
 Qed.
 
+Lemma execF_list_parts :
+  forall (Fs : list def) (Ls : list decl) (g : rctx),
+    (forall n' er, execF_list Fs g n' = er -> result_list_ok er Ls) ->
+        Fs / g  =>:* Ls.
+Proof.
+  introv H. unfold execs_to_decls. apply (fun n' => H n' _ eq_refl).
+Qed.
 
-(** *** Lemma for  reasoning about LETRT forms. *)
+(** *** Lemmas for  reasoning about LETRT forms. *)
 
 Lemma let_val : 
   forall t1 g n' (f : evalue -> ef_return) erf T1 T2,
@@ -537,17 +584,96 @@ Proof.
         apply (Hin v1 (evalF t1 g n') Heqer1 Heval erf HLet).
 Qed.
 
+Lemma let_vlist : 
+  forall Fs g n' (f : alist evalue -> ef_return) erf Ls T2,
+    (LETRT bs <== execF_list Fs g n' IN f bs) = erf ->
+    Fs / g =>:* Ls -> 
+    (forall bs1 er1, 
+       efr_normal bs1 = er1 -> 
+       bs1 :::* Ls -> 
+       forall er2, 
+         (f bs1) = er2 -> 
+         result_ok er2 T2) -> 
+    result_ok erf T2.
+Proof. 
+    introv HLet Heval Hin. 
+    specialize (Heval n'). 
+    remember (execF_list Fs g n') as er1.
+    destruct er1 as [bs1 | | ]; try (subst erf; auto; fail).
+      Case "result_ok bs1". 
+        unfold result_list_ok in Heval. 
+        apply (Hin bs1 _ Heqer1 Heval erf HLet).
+Qed.
+
+Lemma list_let_val : 
+  forall t1 g n' (f : evalue -> xf_return) xrf T1 T2,
+    (LETRT x <== evalF t1 g n' IN f x) = xrf ->
+    t1 / g =>: T1 -> 
+    (forall v1 er1, 
+       efr_normal v1 = er1 -> 
+       v1 ::: T1 -> 
+       forall er2, 
+         (f v1) = er2 -> 
+         result_list_ok er2 T2) -> 
+    result_list_ok xrf T2.
+Proof. 
+    introv HLet Heval Hin. 
+    specialize (Heval n'). 
+    remember (evalF t1 g n') as er1.
+    destruct er1 as [v1 | | ]; try (subst xrf; auto; fail).
+      Case "result_ok v1". 
+        unfold result_ok in Heval. 
+        apply (Hin v1 (evalF t1 g n') Heqer1 Heval xrf HLet).
+Qed.
+
+Lemma list_let_vlist : 
+  forall Fs1 g n' (f : alist evalue -> xf_return) erf Ls1 Ls2,
+    (LETRT bs1 <== execF_list Fs1 g n' IN f bs1) = erf ->
+    Fs1 / g =>:* Ls1 -> 
+    (forall bs1 er1, 
+       efr_normal bs1 = er1 -> 
+       bs1 :::* Ls1 -> 
+       forall er2, 
+         (f bs1) = er2 -> 
+         result_list_ok er2 Ls2) -> 
+    result_list_ok erf Ls2.
+Proof. 
+    introv HLet Heval Hin. 
+    specialize (Heval n'). 
+    remember (execF_list Fs1 g n') as er1.
+    destruct er1 as [bs1 | | ]; try (subst erf; auto; fail).
+      Case "result_ok bs1". 
+        unfold result_list_ok in Heval. 
+        apply (Hin bs1 _ Heqer1 Heval erf HLet).
+Qed.
+
+
 (* ###################################################################### *)
 (**  ** Proof of soundness of evalF *)
 (**  *** Proof of [evalF_is_sound_yielding_T] *)
 
+Ltac tm_ind_tactic t c := 
+  t_cases (induction t as 
+    [ | | x | t1 IHt1 t2 IHt2 | x Tx tb IHtb | Fs | tr IHtr x 
+    | ti IHti tt IHtt te IHte ] using tm_rect) c.
+  
+Ltac tm_xind_tactic t Qv C := 
+  t_xcases (induction t 
+    as [ | | x | t1 IHt1 t2 IHt2 | x Tx tb IHtb | Fs IHFs | | x t Fs IHt IHFs 
+         | tr IHtr x | ti IHti tt IHtt te IHte ]
+    using tm_xrect with (Q:=Qv)) C.
+
+  
 Theorem evalF_is_sound_yielding_T : 
   forall (t : tm) (G : context) (T : ty) (g : rctx),
     G |- t \in T ->  g :::* G -> t / g  =>: T.
 Proof.
-  (* introv Hty HGg. generalize dependent G. generalize dependent g. generalize dependent T. *)
-  t_cases (induction t as [ | | x | t1 IHt1 t2 IHt2 | x Tx tb IHtb | Fs | tr IHtr x | ti ? tt ? te ? ]) 
-      Case; introv Hty HGg.
+  set (Q:=fun Fs : list def =>
+          forall (G : context) (Ls : list decl) (g : rctx),
+            G |- Fs *\in Ls ->  g :::* G -> Fs / g  =>:* Ls).
+  tm_xind_tactic t Q Case; introv Hty HGg.
+
+  (*tm_xind_tactic t Q Case; introv Hty HGg.*)
 
   Case "ttrue".
     inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
@@ -586,7 +712,28 @@ Proof.
 
   Case "trcd". 
     inverts Hty. apply evalF_parts; intros n' er Hev. simpl in Hev.
-    admit.
+    subst Q.
+    rewrite <- (execs_to_decls_eqv Fs g n') in Hev.
+    assert (HFs := IHFs _ _ _ H1 HGg); clear IHFs H1.
+    apply (let_vlist _ g n' _ _ _ _ Hev HFs); clear Hev HFs;
+    intros bs er1 Hbs Hbst er2 Hev2; subst.  apply Hbst. 
+
+  Case "trnil".
+    inverts Hty. apply execF_list_parts.  intros n' er Hev. simpl in Hev.
+    subst. apply TC_nil.
+    (* subst. reflexivity. *)
+
+  Case "trcons".
+    inverts Hty. apply execF_list_parts.  intros n' er Hev. simpl in Hev.
+   (* set (f1 : evalue -> efr_return := fun v => 
+      LETRT bs' <== execF_list Fs g n' IN efr_normal (aextend x v bs')).*)
+    assert (Ht := IHt _ _ _ H4 HGg); clear IHt H4.
+    assert (HFs := IHFs _ _ _ H5 HGg); clear IHFs H5.
+    apply (list_let_val t g n' _ _ T _ Hev Ht). clear Hev Ht;
+    intros v1 er1 Hv1 Hv1t erL2 HevL2. subst er1.
+    apply (list_let_vlist _ g n' _ _ Tr _ HevL2 HFs). clear HevL2 HFs;
+    intros bs2 er2 Hbs2 Hbs2t erf Hevf. subst.
+    unfold result_list_ok. apply (TC_cons _ _ _ _ _ Hbs2t Hv1t).
 
   Case "tproj". 
     inverts Hty. apply evalF_parts; intros n' er Hev. simpl in Hev. 
@@ -599,12 +746,12 @@ Proof.
 
   Case "tif".
     inverts Hty. apply evalF_parts; intros n' er Hev; simpl in Hev.
-    assert (Hti := IHt1 _ _ _ H3 HGg); clear IHt1 H3.
+    assert (Hti := IHti _ _ _ H3 HGg); clear IHti H3.
     apply (let_val ti g n' _ _ _ _ Hev Hti); clear Hev Hti;
     intros vi eri Hvi Hvit erc Hevc.
     destruct (bool_vals vi Hvit); subst.
-      SSCase "v = vtrue". apply (IHt2 _ _ _ H5 HGg n').
-      SSCase "v = vfalse". apply (IHt3 _ _ _ H6 HGg n').
+      SSCase "v = vtrue". apply (IHtt _ _ _ H5 HGg n').
+      SSCase "v = vfalse". apply (IHte _ _ _ H6 HGg n').
 
 Qed.
 
