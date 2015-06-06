@@ -600,8 +600,7 @@ Lemma let_val :
   forall t1 g n' (f : evalue -> ef_return) erf T1 T2,
     (LETRT x <== evalF t1 g n' IN f x) = erf ->
     t1 / g =>: T1 -> 
-    (forall v1 er1, 
-       efr_normal v1 = er1 -> 
+    (forall v1, 
        v1 ::: T1 -> 
        forall er2, 
          (f v1) = er2 -> 
@@ -610,19 +609,17 @@ Lemma let_val :
 Proof. 
     introv HLet Heval Hin. 
     specialize (Heval n'). 
-    remember (evalF t1 g n') as er1.
-    destruct er1 as [v1 | | ]; try (subst erf; auto; fail).
+    destruct (evalF t1 g n') as [v1 | | ]; try (subst erf; auto; fail).
       Case "result_ok v1". 
         unfold result_ok in Heval. 
-        apply (Hin v1 (evalF t1 g n') Heqer1 Heval erf HLet).
+        apply (Hin v1 Heval erf HLet).
 Qed.
 
 Lemma let_vlist : 
   forall Fs g n' (f : alist evalue -> ef_return) erf Ls T2,
     (LETRT bs <== execF_list Fs g n' IN f bs) = erf ->
     Fs / g =>:* Ls -> 
-    (forall bs1 er1, 
-       efr_normal bs1 = er1 -> 
+    (forall bs1,
        bs1 :::* Ls -> 
        forall er2, 
          (f bs1) = er2 -> 
@@ -631,19 +628,17 @@ Lemma let_vlist :
 Proof. 
     introv HLet Heval Hin. 
     specialize (Heval n'). 
-    remember (execF_list Fs g n') as er1.
-    destruct er1 as [bs1 | | ]; try (subst erf; auto; fail).
+    destruct (execF_list Fs g n') as [bs1 | | ]; try (subst erf; auto; fail).
       Case "result_ok bs1". 
         unfold result_list_ok in Heval. 
-        apply (Hin bs1 _ Heqer1 Heval erf HLet).
+        apply (Hin bs1 Heval erf HLet).
 Qed.
 
 Lemma list_let_val : 
   forall t1 g n' (f : evalue -> xf_return) xrf T1 T2,
     (LETRT x <== evalF t1 g n' IN f x) = xrf ->
     t1 / g =>: T1 -> 
-    (forall v1 er1, 
-       efr_normal v1 = er1 -> 
+    (forall v1,
        v1 ::: T1 -> 
        forall er2, 
          (f v1) = er2 -> 
@@ -652,19 +647,17 @@ Lemma list_let_val :
 Proof. 
     introv HLet Heval Hin. 
     specialize (Heval n'). 
-    remember (evalF t1 g n') as er1.
-    destruct er1 as [v1 | | ]; try (subst xrf; auto; fail).
+    destruct (evalF t1 g n') as [v1 | | ]; try (subst xrf; auto; fail).
       Case "result_ok v1". 
         unfold result_ok in Heval. 
-        apply (Hin v1 (evalF t1 g n') Heqer1 Heval xrf HLet).
+        apply (Hin v1 Heval xrf HLet).
 Qed.
 
 Lemma list_let_vlist : 
   forall Fs1 g n' (f : alist evalue -> xf_return) erf Ls1 Ls2,
     (LETRT bs1 <== execF_list Fs1 g n' IN f bs1) = erf ->
     Fs1 / g =>:* Ls1 -> 
-    (forall bs1 er1, 
-       efr_normal bs1 = er1 -> 
+    (forall bs1,
        bs1 :::* Ls1 -> 
        forall er2, 
          (f bs1) = er2 -> 
@@ -673,11 +666,10 @@ Lemma list_let_vlist :
 Proof. 
     introv HLet Heval Hin. 
     specialize (Heval n'). 
-    remember (execF_list Fs1 g n') as er1.
-    destruct er1 as [bs1 | | ]; try (subst erf; auto; fail).
+    destruct (execF_list Fs1 g n') as [bs1 | | ]; try (subst erf; auto; fail).
       Case "result_ok bs1". 
         unfold result_list_ok in Heval. 
-        apply (Hin bs1 _ Heqer1 Heval erf HLet).
+        apply (Hin bs1 Heval erf HLet).
 Qed.
 
 
@@ -715,9 +707,9 @@ Proof.
     assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
     (* use the [let_val] lemma with Ht1 and Ht2 to decompose the two LETRT forms *)
     apply (let_val t1 g n' _ _ (TArrow T1 T) T Hev Ht1); clear Hev Ht1;
-    intros v1 er1 Hv1 Hv1t erL2 HevL2.
+    intros v1 Hv1t erL2 HevL2.
     apply (let_val t2 g n' _ _ _ _ HevL2 Ht2); clear HevL2 Ht2;
-    intros v2 er2 Hv2 Hv2t erf Hevf.
+    intros v2 Hv2t erf Hevf.
     assert (Hex := fun_vals _ _ _ Hv1t); clear Hv1t;
     destruct Hex as (xf & tb & gf & Hv1eq & Hva); subst v1. 
     apply (TVE_inv _ _ _ (Hva v2 Hv2t) n' _ Hevf).
@@ -732,7 +724,7 @@ Proof.
     rewrite <- (execF_list_eq Fs g n') in Hev.
     assert (HFs := IHFs _ _ _ H1 HGg); clear IHFs H1.
     apply (let_vlist _ g n' _ _ _ _ Hev HFs); clear Hev HFs;
-    intros bs er1 Hbs Hbst er2 Hev2. 
+    intros bs Hbst er2 Hev2. 
     apply (TR_Norm _ _ _ Hev2 (TV_Rcd _ _ Hbst)).
 
   Case "trnil".
@@ -742,16 +734,16 @@ Proof.
     assert (Ht := IHt _ _ _ H4 HGg); clear IHt H4.
     assert (HFs := IHFs _ _ _ H5 HGg); clear IHFs H5.
     apply (list_let_val tx g n' _ _ T _ Hev Ht); clear Hev Ht;
-    intros v1 er1 Hv1 Hv1t erL2 HevL2.
+    intros v1 Hv1t erL2 HevL2.
     apply (list_let_vlist _ g n' _ _ Tr _ HevL2 HFs); clear HevL2 HFs;
-    intros bs2 er2 Hbs2 Hbs2t erf Hevf. 
+    intros bs2 Hbs2t erf Hevf. 
     apply (TRL_Norm _ _ _ Hevf).
     apply (TC_cons _ _ _ _ _ Hbs2t Hv1t).
 
   Case "tproj". 
     assert (Htr := IHtr _ _ _ H2 HGg); clear IHtr H2.
     apply (let_val tr g n' _ _ _ _ Hev Htr); clear Hev Htr; 
-    intros vr err Hvr Hvrt erp Hevp.
+    intros vr Hvrt erp Hevp.
     destruct (rcd_vals _ _ Hvrt) as [bs [? HbsT ]]. subst vr.
     destruct (ctxts_agree_on_lookup _ _ HbsT _ _ H4) as [v [Hlk HvT]].
     rewrite Hlk in Hevp. 
@@ -760,7 +752,7 @@ Proof.
   Case "tif".
     assert (Hti := IHti _ _ _ H3 HGg); clear IHti H3.
     apply (let_val ti g n' _ _ _ _ Hev Hti); clear Hev Hti;
-    intros vi eri Hvi Hvit erc Hevc.
+    intros vi Hvit erc Hevc.
     destruct (bool_vals vi Hvit); subst.
       SSCase "v = vtrue". apply (IHtt _ _ _ H5 HGg n').
       SSCase "v = vfalse". apply (IHte _ _ _ H6 HGg n').
