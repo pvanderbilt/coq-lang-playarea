@@ -152,6 +152,42 @@ Proof with auto.
   intros. unfold add_vdecl, lookup_vdecl. destruct (eq_id_dec x2 x1)...
 Qed.
 
+(** Lemma [lookup_add_vdecl_case] allows one to more easily handle the
+    two possible cases of [lookup_vdecl] after [add_vdecl] (except as a cons).
+    Move to generic code. *)
+
+Lemma lookup_add_vdecl_case :
+  forall x y T Ls' r, 
+    lookup_vdecl x (add_vdecl y T Ls') = r ->
+    (y=x /\ Some T = r) \/ (y<>x /\ lookup_vdecl x Ls' = r).
+Proof.
+  introv Hlk.
+  unfold lookup_vdecl, add_vdecl in Hlk.
+  destruct (eq_id_dec y x) as [ He | Hne].
+    SCase "y=x". left. auto.
+    SCase "y<>x". fold lookup_vdecl in Hlk. right. auto. 
+Qed.
+
+(** A previous attempt at an induction-like rule for casing on the outcome of
+    lookup over add. The rule can be proved, but I can't figure out
+    how to apply it to prove [ctxts_agree_on_lookup]. *)
+
+Lemma lookup_add_vdecl_case_old :
+  forall (P : id -> id -> ty -> list decl -> option ty -> Prop)
+    (Heq : forall x T Ls' r, r = Some T -> P x x T Ls' r)
+    (Hneq : forall x y T Ls' r, r = (lookup_vdecl x Ls') -> y<>x -> P x y T Ls' r),
+    forall x y T Ls' r, lookup_vdecl x (add_vdecl y T Ls') = r ->
+      P x y T Ls' r.
+Proof.
+  intros P Heq Hneq x y T Ls' r Hlk.
+  unfold lookup_vdecl, add_vdecl in Hlk.
+  destruct (eq_id_dec y x) as [ He | Hne].
+    SCase "y=x". subst. apply Heq. reflexivity.
+    SCase "y<>x". fold lookup_vdecl in Hlk.
+      subst r. apply (Hneq _ _ _ _ _ eq_refl Hne).
+Qed.
+
+
 
 (* ###################################################################### *)
 (** ** Custom recursion principles. *)

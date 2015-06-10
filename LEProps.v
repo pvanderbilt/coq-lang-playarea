@@ -1,8 +1,10 @@
 (** * Soundness of EvalF (a big-step semantics for LDef) *)
 
-(**  This file develops a proof of soundness of [evalF], using a recursive definition of 
-      [value_has_type] rather than an inductive relation (as was done in earlier attempts).  
-      It seems to be working!  *)
+(**  This file develops a proof of soundness of [evalF], 
+     using a recursive definition of 
+     [value_has_type] rather than an inductive relation 
+     (as was done in earlier attempts).  
+     It has been updated to handle records and seems to be working!  *)
 
 Load Init.
 Require Export SfLib.
@@ -19,24 +21,35 @@ Module LEProps.
 (**  We define several relations concurrently:
         - [v ::: T] (aka [value has type v T]): 
           value v is the result of evaluating some term of type T.
-        - [t / g =>: T] (aka [evaluates_to_a t g T]): 
+        - [bs :::* Ls] (aka [bindings_match_decls g G]): 
+          [bs] is a list of [(xi,vi)] pairs and [Ls] is a list of declarations,
+          [(Lv xi Ti)] and [vi:::Ti] for all [i]; thus [bs]
+          has exactly the elements specified by 
+          the typing context Ls (in the same order).
+        - [t / g =>: T] (aka [may_eval_to t g T]): 
           term t, when evaluated in runtime-context g, 
-          will either yield a value v ::: T or not terminate 
+          will either yield a value [v] such that [v:::T] or not terminate 
           (but it won't get stuck).
-        - [result_ok er T]: er (an instance of ef_return) is either 
-          efr_normal v and v ::: T 
-          or is efr_nogas; it is not efr_stuck.
-        - [ g :::* G] (aka [bindings_match_decls g G]): 
-          the runtime context, g, has exactly the elements specified by 
-          the typing context G (Gamma) (in the same order).
+        - [Fs / g =>:* Ls] (aka [may_exec_list_to Fs g Ls]): 
+          [Fs] is a list of definitions, each [(Fv xi ti)], 
+          [Ls] is a list of declarations, each [(Lv xi Ti)], 
+          and for each [i], [ti / g =>: Ti]; thus executing [Fs] will 
+          either yield a value list [bs], such that [bs :::* Ls] 
+          or it won't terminate (but it won't get stuck).
+        - [result_ok er T]: [er] (an instance of [ef_return]) is either 
+          [efr_normal v] and [v ::: T]
+          or [er] is [efr_nogas]; [er] is not [efr_stuck].
+        - [result_list_ok xr Ls]: [xr] (an instance of [xf_return]) is either 
+          [efr_normal bs] and [bs :::* Ls]
+          or [xr] is [efr_nogas]; [xr] is not [efr_stuck].
 
     If defined as mutually recursive functions, Coq complains about 
-    the lack of a non-decreasing argument.
-    While it really is decreasing, Coq can't figure it out.  
-    In the meantime, [value_has_type] is defined with the next three 
-    nested within and then they are defined again
-    outside the [value_has_type] definition.
+    the lack of a non-decreasing argument 
+    (which really is decreasing but Coq can't tell).
     It would be nice if there was a way to get around this.
+    In the meantime, [value_has_type] is defined with certain others 
+    nested within and then the others are defined again
+    outside the [value_has_type] definition.
 *)
 
 Reserved Notation "v ':::' T" (at level 40).
@@ -50,23 +63,8 @@ Fixpoint value_has_type (v : evalue) (T : ty) {struct T} : Prop :=
       | efr_nogas     => True
       | efr_stuck     => False
     end
-  in let evaluates_to_a (t : tm) (g : rctx) (T : ty) : Prop := 
+  in let may_eval_to (t : tm) (g : rctx) (T : ty) : Prop := 
     forall n, result_ok (evalF t g n) T
-(*
-  in let fix bindings_match_decls 
-           (bs : alist evalue) (Ls : list decl) {struct Ls} : Prop :=
-    match Ls with
-      | nil => True
-      | (Lv x T) :: Ls' => (exists v, alookup x bs = Some v /\ v ::: T)
-                           /\ bindings_match_decls bs Ls'
-    end
-*)
-(*
-  in let bindings_match_decls 
-           (bs : alist evalue) (Ls : list decl) : Prop :=
-   forall x T, lookup_vdecl x Ls = Some T ->
-      exists v, alookup x bs = Some v /\ v ::: T
-*)
   in let fix bindings_match_decls 
            (bs : alist evalue) (Ls : list decl) {struct Ls} : Prop :=
     match (Ls, bs) with
@@ -79,23 +77,11 @@ Fixpoint value_has_type (v : evalue) (T : ty) {struct T} : Prop :=
     | (TBool, vtrue) => True
     | (TBool, vfalse) => True
     | ((TArrow T1 T2), (vabs xf tb gf)) => 
-        forall va, va ::: T1 -> evaluates_to_a tb (aextend xf va gf) T2
+        forall va, va ::: T1 -> may_eval_to tb (aextend xf va gf) T2
     | ((TRcd Tr), (vrcd vr)) => bindings_match_decls vr Tr 
     | (_, _) => False
   end
 where "v ':::' T" := (value_has_type v T).
-
-Definition result_ok (er : ef_return) (T : ty) : Prop :=
-    match er with
-      | efr_normal vr => vr ::: T
-      | efr_nogas => True
-      | efr_stuck => False
-    end.
-
-Definition evaluates_to_a (t : tm) (g : rctx) (T : ty) : Prop := 
-    forall n, result_ok (evalF t g n) T.
-Notation "t '/' g '=>:' T" := (evaluates_to_a t g T) 
-    (at level 40, g at level 39).
 
 Fixpoint bindings_match_decls 
            (bs : alist evalue) (Ls : list decl) {struct Ls} : Prop :=
@@ -107,6 +93,13 @@ Fixpoint bindings_match_decls
     end.
 Notation "g ':::*' G" := (bindings_match_decls g G).
 
+Definition result_ok (er : ef_return) (T : ty) : Prop :=
+    match er with
+      | efr_normal vr => vr ::: T
+      | efr_nogas => True
+      | efr_stuck => False
+    end.
+
 Definition result_list_ok (er : xf_return) (Ls : list decl) : Prop :=
     match er with
       | efr_normal bs => bs :::* Ls
@@ -114,334 +107,51 @@ Definition result_list_ok (er : xf_return) (Ls : list decl) : Prop :=
       | efr_stuck => False
     end.
 
-
-Definition execs_to_decls (Fs : list def) (g : rctx) (Ls : list decl) : Prop := 
-    forall n', result_list_ok (execF_list Fs g n') Ls.
-Notation "Fs '/' g '=>:*' Ls" := (execs_to_decls Fs g Ls) 
+Definition may_eval_to (t : tm) (g : rctx) (T : ty) : Prop := 
+    forall n, result_ok (evalF t g n) T.
+Notation "t '/' g '=>:' T" := (may_eval_to t g T) 
     (at level 40, g at level 39).
 
-Hint Unfold value_has_type result_ok evaluates_to_a bindings_match_decls.
+Definition may_exec_list_to (Fs : list def) (g : rctx) (Ls : list decl) : Prop := 
+    forall n', result_list_ok (execF_list Fs g n') Ls.
+Notation "Fs '/' g '=>:*' Ls" := (may_exec_list_to Fs g Ls) 
+    (at level 40, g at level 39).
+
+Hint Unfold value_has_type bindings_match_decls result_ok result_list_ok 
+     may_eval_to may_exec_list_to.
 
 
-
-(** A handy lemma for doing a form of induction over :::*.
-    Use it with the [refine] tactic.
-*)
-
-Lemma bmd_ind: 
-  forall (P : list decl -> alist evalue -> Type)
-    (fnil : P nil nil)
-    (fcons: forall x v T Ls' bs', 
-      v ::: T -> (P Ls' bs') -> P ((Lv x T)  :: Ls') ((x, v) :: bs')),
-    forall (Ls : list decl) (bs : alist evalue), (bs :::* Ls) -> P Ls bs.
-Proof.
-  intros P fnil fcons Ls.
-  induction Ls as [ | [x T] Ls']; intros bs Hbmd;
-      destruct bs as [ |[y v] bs']; simpl in Hbmd; try contradiction.
-    Case "Ls = []". 
-      apply fnil.
-    Case "Ls = L :: Ls'".
-      destruct Hbmd as (Heq & Hvyt & Hbmd'). subst y. 
-      apply (fcons _ _ _ _ _ Hvyt (IHLs' _ Hbmd')).
-Qed.
-
-
-(*
-Fixpoint bindings_match_decls 
-           (bs : alist evalue) (Ls : list decl) {struct Ls} : Prop :=
+(** The following are some alternate definition bodies of [bs:::*Ls] that I've 
+    considered: 
+<<
     match Ls with
       | nil => True
       | (Lv x T) :: Ls' => (exists v, alookup x bs = Some v /\ v ::: T)
                            /\ bindings_match_decls bs Ls'
-    end.
-*)
-(*
-Definition bindings_match_decls (bs : alist evalue) (Ls : list decl) : Prop :=
-  let decl_implies_lookup bs L := match L with (Lv x T) => exists v, alookup x bs = Some v /\ v ::: T end
+    end
+
+   forall x T, lookup_vdecl x Ls = Some T ->
+      exists v, alookup x bs = Some v /\ v ::: T
+
+  let decl_implies_lookup bs L := 
+    match L with (Lv x T) => exists v, alookup x bs = Some v /\ v ::: T end
   in Forall (decl_implies_lookup bs) Ls.
-*)
-(*  Forall (fun L => match L with (Lv x T) => exists v, alookup x bs = Some v /\ v ::: T end) Ls. *)
 
-(*
-Inductive bindings_match_decls: rctx -> context -> Prop :=
-  | TC_nil : nil :::* empty
-  | TC_cons : forall G g x v T, 
+>>
+The following is the original inductive definition:
+<<
+  Inductive bindings_match_decls: rctx -> context -> Prop :=
+    | TC_nil : nil :::* empty
+    | TC_cons : forall G g x v T, 
                 g :::* G -> v ::: T -> (aextend x v g) :::* (add_vdecl x T G)
-where "g ':::*' G" := (bindings_match_decls g G).
-Hint Constructors  bindings_match_decls.
+  where "g ':::*' G" := (bindings_match_decls g G).
+>>
 *)
 
-(** **** Constructor lemmas *)
-(** Lemmas that mimic the inductive constructors that would have 
-    been defined if Coq allowed us to define our relations that way. *)
-
-Lemma TV_True :
-  vtrue ::: TBool.
-Proof. reflexivity. Qed.
-
-Lemma TV_False :
-  vfalse ::: TBool.
-Proof. reflexivity. Qed.
-
-Lemma TV_Abs :
-  forall xf tb gf T1 T2,
-    (forall va,  va ::: T1 -> tb / (aextend xf va gf) =>: T2) ->
-    vabs xf tb gf ::: TArrow T1 T2.
-Proof. introv H. simpl. exact H. Qed.
-
-Lemma TV_Rcd : 
-  forall Fs Ls,
-    Fs :::* Ls ->
-    vrcd Fs ::: TRcd Ls.
-Proof. introv H. simpl. exact H. Qed.
-
-Lemma TC_nil :
-  nil :::* nil.
-Proof. simpl. constructor. Qed.
-
-Lemma TC_cons : 
-  forall G g x v T,
-    g :::* G ->
-    v ::: T ->
-    (aextend x v g) :::* (add_vdecl x T G).
-Proof. auto.
-  introv HgG HvT. simpl. auto. 
-Qed.
-
-Lemma TVE:
-  forall t g T,
-    (forall n er, evalF t g n = er -> result_ok er T) -> 
-    (t / g =>: T).
-Proof.
-  introv H. red. apply (fun n => H n (evalF t g n) eq_refl).
-Qed.
-
-Lemma TVE_inv:
-  forall t g T,
-    (t / g =>: T) -> 
-    (forall n er, evalF t g n = er -> result_ok er T).
-Proof.
-  intros t g T Hevto n er ?; subst er. apply Hevto.
-Qed.
-
-Lemma TR_Norm : 
-  forall v T er,
-    efr_normal v = er ->
-    v ::: T ->
-    result_ok er T.
-Proof.
-  introv Heq Ht. subst. simpl. exact Ht.
-Qed.
-
-Lemma TRL_Norm : 
-  forall Fs Ls xr,
-    efr_normal Fs = xr ->
-    Fs :::* Ls ->
-    result_list_ok xr Ls.
-Proof.
-  introv Heq Ht. subst. simpl. exact Ht.
-Qed.
-
-(* Not used: a version using [bmd_ind] but not [lookup_case]. *)
-Lemma ctxts_agree_on_lookup_old1 : 
-  forall (Ls : context) (bs : rctx),
-    bs :::* Ls -> 
-    forall (x : id) (T : ty),
-      lookup_vdecl x Ls = Some T ->
-        exists v, alookup x bs = Some v /\ v ::: T.
-Proof.
-  refine (bmd_ind
-    (fun Ls bs => forall (x : id) (T : ty),
-      lookup_vdecl x Ls = Some T ->
-        exists v, alookup x bs = Some v /\ v ::: T)
-    _
-    _).
-     Case "nil". introv Hlk. inverts Hlk.
-     Case "cons". introv Hvt IH Hlk.
-      unfold lookup_vdecl in Hlk.
-      destruct (eq_id_dec x x0).
-        SCase "x=x0". inversion Hlk; subst; clear Hlk.
-          exists v. split.
-            simpl. apply eq_id.
-            apply Hvt.
-        SCase "x<>x0". fold lookup_vdecl in Hlk.
-          destruct (IH _ _ Hlk) as [v0 [Hlk0 Hvt0]].
-          exists v0. split.
-            rewrite (alookup_cons_neq _ _ _ _ _ n). apply Hlk0.
-            apply Hvt0.
-Qed.
-
-(** An attempt at an induction-like rule for casing on the outcome of
-    lookup over add. The rule can be proved, but it's hard to use, as
-    the binding for r is wrong. *)
-
-Lemma lookup_cons_case_old :
-  forall (P : id -> id -> ty -> list decl -> option ty -> Prop)
-    (Heq : forall x T Ls' r, r = Some T -> P x x T Ls' r)
-    (Hneq : forall x y T Ls' r, r = (lookup_vdecl x Ls') -> y<>x -> P x y T Ls' r),
-    forall x y T Ls' r, lookup_vdecl x (Lv y T :: Ls') = r ->
-      P x y T Ls' r.
-Proof.
-  intros P Heq Hneq x y T Ls' r Hlk.
-  unfold lookup_vdecl in Hlk.
-  destruct (eq_id_dec y x) as [ He | Hne].
-    SCase "y=x". subst. apply Heq. reflexivity.
-    SCase "y<>x". fold lookup_vdecl in Hlk.
-      subst r. apply (Hneq _ _ _ _ _ eq_refl Hne).
-Qed.
-
-(** Lemma [lookup_cons_case] allows one to more easily handle the
-    two possible cases of [lookup_vdecl] after [add_vdecl] (except as a cons).
-    Move to generic code. *)
-
-Lemma lookup_cons_case :
-  forall x y T Ls' r, 
-    lookup_vdecl x (Lv y T :: Ls') = r ->
-    (y=x /\ Some T = r) \/ (y<>x /\ lookup_vdecl x Ls' = r).
-Proof.
-  introv Hlk.
-  unfold lookup_vdecl in Hlk.
-  destruct (eq_id_dec y x) as [ He | Hne].
-    SCase "y=x". left. auto.
-    SCase "y<>x". fold lookup_vdecl in Hlk. right. auto. 
-Qed.
-
-(** Revision using above lemma:*)
-
-Lemma ctxts_agree_on_lookup_old2 : 
-  forall (Ls : context) (bs : rctx),
-    bs :::* Ls -> 
-    forall (x : id) (T : ty),
-      lookup_vdecl x Ls = Some T ->
-        exists v, alookup x bs = Some v /\ v ::: T.
-Proof.
-  refine (bmd_ind
-    (fun Ls bs => forall (x : id) (T : ty),
-      lookup_vdecl x Ls = Some T ->
-        exists v, alookup x bs = Some v /\ v ::: T)
-    _
-    _).
-     Case "nil". introv Hlk. inverts Hlk.
-     Case "cons". introv Hvt IH Hlk.
-       apply lookup_cons_case in Hlk. destruct Hlk as [[Hxe HTe] | [Hxn Hle]].
-         SCase "x=x0". inversion HTe; subst; clear HTe. exists v. split.
-           simpl. apply eq_id.
-           apply Hvt. 
-         SCase "x<>x0". 
-           destruct (IH _ _ Hle) as [v0 [Hlk0 Hvt0]].
-           exists v0. split.
-             rewrite (alookup_cons_neq _ _ _ _ _ Hxn). apply Hlk0.
-             apply Hvt0.
-Qed.
-
-(** Using refine with all underscores (use this one): *)
-
-Lemma ctxts_agree_on_lookup : 
-  forall (Ls : context) (bs : rctx),
-    bs :::* Ls -> 
-    forall (x : id) (T : ty),
-      lookup_vdecl x Ls = Some T ->
-        exists v, alookup x bs = Some v /\ v ::: T.
-Proof.
-  refine (bmd_ind _ _ _).
-    Case "nil". introv Hlk. inverts Hlk.
-    Case "cons". introv Hvt IH Hlk.
-      apply lookup_cons_case in Hlk. 
-      destruct Hlk as [[Hxe HTe] | [Hxn Hle]].
-        SCase "x=x0". 
-          inversion HTe; subst; clear HTe. 
-          exists v. split.
-            apply alookup_cons_eq.
-            apply Hvt. 
-        SCase "x<>x0". 
-          destruct (IH _ _ Hle) as [v0 [Hlk0 Hvt0]]. 
-          exists v0. split.
-            rewrite (alookup_cons_neq _ _ _ _ _ Hxn). apply Hlk0.
-            apply Hvt0.
-Qed.
-
-(* Not working:
-Lemma decl_implies_value:
-  forall x T Ls bs, 
-    In (Lv x T) Ls -> 
-    bs :::* Ls ->
-    exists v, alookup x bs = Some v /\ v ::: T.
-Proof.
-  pose (P:= fun Ls bs => forall x T, 
-         In (Lv x T) Ls -> 
-         exists v, alookup x bs = Some v /\ v ::: T).
-  assert (forall Ls bs, bs :::* Ls -> P Ls bs).
-    apply bmd_ind.
-      Case "nil". unfold P. intros x T Hin.  simpl in Hin. contradiction.
-      Case "cons". introv Hvt IH Hin. destruct Hin as [Heq | HLs'].
-         SCase "=". inversion Heq; subst x0 T0; clear Heq.
-           exists v. split. 
-             simpl. apply eq_id. 
-             apply Hvt.
-        SCase "In tail". 
-          destruct bs as [ |[y vy] bs']; 
-            destruct L; simpl in Hbmd; try contradiction.
-        apply (IHLs' HLs' Hrest).
-
-          apply (IH _ _ HLs').
-  induction Ls as [ | L Ls'].
-    Case "Ls = []". simpl in Hin. contradiction.
-    Case "Ls = L :: Ls'".  simpl in Hin.
-      destruct Hin as [Heq | HLs'].
-      SCase "=". subst L.  
-         destruct bs as [ |[y vy] bs']; simpl in Hbmd; try contradiction.
-         destruct Hbmd as (Heq & Hvyt & Hbmd').
-         subst y.  exists vy. split.
-           simpl. apply eq_id. 
-           apply Hvyt.
-      SCase "In tail". 
-        destruct bs as [ |[y vy] bs']; 
-          destruct L; simpl in Hbmd; try contradiction.
-        apply (IHLs' HLs' Hrest).
-simpl in Hin.
-       destruct L as [y Ty]. destruct bs; simpl in Hbmd; try contradiction.
-
- 
-destruct Hbmd as [Hex Hrest]. 
-Qed.
-*)
-
-
-(* ###################################################################### *)
-(** ** Lemmas  *)
-(** *** Lemmas for "inverting" the [value_has_type] function. *)
-
-Lemma bool_vals: forall v, v ::: TBool -> (v = vtrue \/ v = vfalse).
-Proof.
-  intros v Hvt. destruct v; try (simpl in Hvt; contradiction); auto.
-Qed.
-
-Lemma fun_vals:
-  forall T1 T2 v, v ::: TArrow T1 T2 ->
-    exists xf tb gf, 
-      v = (vabs xf tb gf) 
-      /\ (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2).
-Proof. 
-  intros T1 T2 v Hvt.  destruct v; simpl in Hvt; try contradiction.
-    exists i t a. split. 
-      reflexivity.
-      intros va Hvat n. 
-        specialize (Hvt va Hvat n). 
-        destruct (evalF t (aextend i va a) n); unfold result_ok; auto.
-Qed.
-
-Lemma rcd_vals :
-  forall v Ls, v ::: TRcd Ls ->
-    exists bs, 
-      v = (vrcd bs) /\ bs :::* Ls.
-Proof. 
-  intros v Ls Hvt. destruct v as [ | | | bs]; simpl in Hvt; try contradiction.
-    exists bs. split. 
-      reflexivity.
-      assumption.
-Qed.
-
-(** *** value_has_type redefined and its equivalence *)
+(** Here I redefine [value_has_type] using the above functions 
+    and show that it is equivalent.  My thinking was that this
+    would avoid the nested definitions, but they don't seem
+    to come up, so this isn't used.*)
 
 Fixpoint value_has_type' (v : evalue) (T : ty) {struct T} : Prop :=
   match (T, v) with
@@ -462,72 +172,199 @@ Proof.
 Qed.
 
 
-(** *** Lemmas for reasoning about contexts (runtime and typing). *)
-(*Require Import Utils. Import PVUTILS.
-Lemma lookup_implies_in:
-  forall x G T,
-    lookup_vdecl x G = Some T -> In (Lv x T) G.
+(* ###################################################################### *)
+(** ** Lemmas  *)
+(** *** A Lemma for induction on [:::*] *)
+(** Lemma [bmd_ind] is a handy lemma for doing a form of induction over :::*.
+    Use it with the [refine] tactic. *)
+
+Lemma bmd_ind: 
+  forall (P : list decl -> alist evalue -> Type)
+    (fnil : P nil nil)
+    (fcons: forall x v T Ls' bs', 
+      v ::: T -> (P Ls' bs') -> P ((Lv x T)  :: Ls') ((x, v) :: bs')),
+    forall (Ls : list decl) (bs : alist evalue), (bs :::* Ls) -> P Ls bs.
 Proof.
-  introv Hlookup. induction G as [ | L G'].
-  Case "G=[]". inversion Hlookup.
-  Case "G=L::G'". 
-    destruct L as [y Ty].
-    destruct (eq_id_dec y x).
-    SCase "y=x". subst. 
-      simplify_term_in (lookup_vdecl x (Lv x Ty :: G')) Hlookup. 
-        apply lookup_add_vdecl_eq. 
-        inverts Hlookup. simpl. left. reflexivity.
-    SCase "y<>x". 
-      simplify_term_in (lookup_vdecl x (Lv y Ty :: G')) Hlookup.
-        apply lookup_add_vdecl_neq. apply n.
-        simpl. right. apply (IHG' Hlookup).
+  intros P fnil fcons Ls.
+  induction Ls as [ | [x T] Ls']; intros bs Hbmd;
+      destruct bs as [ |[y v] bs']; simpl in Hbmd; try contradiction.
+    Case "Ls = []". 
+      apply fnil.
+    Case "Ls = L :: Ls'".
+      destruct Hbmd as (Heq & Hvyt & Hbmd'). subst y. 
+      apply (fcons _ _ _ _ _ Hvyt (IHLs' _ Hbmd')).
 Qed.
+
+
+
+(** *** Constructor lemmas *)
+(** Lemmas that mimic the inductive constructors that would have 
+    been defined if Coq allowed us to define our relations that way. *)
+
+Lemma VHT_True :
+  vtrue ::: TBool.
+Proof. reflexivity. Qed.
+
+Lemma VHT_False :
+  vfalse ::: TBool.
+Proof. reflexivity. Qed.
+
+Lemma VHT_Abs :
+  forall xf tb gf T1 T2,
+    (forall va,  va ::: T1 -> tb / (aextend xf va gf) =>: T2) ->
+    vabs xf tb gf ::: TArrow T1 T2.
+Proof. introv H. simpl. exact H. Qed.
+
+Lemma VHT_Rcd : 
+  forall Fs Ls,
+    Fs :::* Ls ->
+    vrcd Fs ::: TRcd Ls.
+Proof. introv H. simpl. exact H. Qed.
+
+Lemma BMDs_nil :
+  nil :::* nil.
+Proof. simpl. constructor. Qed.
+
+Lemma BMDs_cons : 
+  forall G g x v T,
+    g :::* G ->
+    v ::: T ->
+    (aextend x v g) :::* (add_vdecl x T G).
+Proof. auto.
+  introv HgG HvT. simpl. auto. 
+Qed.
+
+Lemma MET:
+  forall t g T,
+    (forall n er, evalF t g n = er -> result_ok er T) -> 
+    (t / g =>: T).
+Proof.
+  introv H. red. apply (fun n => H n (evalF t g n) eq_refl).
+Qed.
+
+Lemma ROk_Norm : 
+  forall v T er,
+    efr_normal v = er ->
+    v ::: T ->
+    result_ok er T.
+Proof.
+  introv Heq Ht. subst. simpl. exact Ht.
+Qed.
+
+Lemma RLOk_norm : 
+  forall Fs Ls xr,
+    efr_normal Fs = xr ->
+    Fs :::* Ls ->
+    result_list_ok xr Ls.
+Proof.
+  introv Heq Ht. subst. simpl. exact Ht.
+Qed.
+
+(** *** "Inversion" lemmas *)
+(**  Lemmas for "inverting" the [value_has_type] function. 
+     IN SF, [vht_inv_bool] is called [bool_vals] 
+     and [vht_inv_arrow] is called [fun_vals]).*)
+
+Lemma vht_inv_bool: forall v, v ::: TBool -> (v = vtrue \/ v = vfalse).
+Proof.
+  intros v Hvt. destruct v; try (simpl in Hvt; contradiction); auto.
+Qed.
+
+Lemma vht_inv_arrow:
+  forall v T1 T2, v ::: TArrow T1 T2 ->
+    exists xf tb gf, 
+      v = (vabs xf tb gf) 
+      /\ (forall va, va ::: T1 -> tb / (aextend xf va gf) =>: T2).
+Proof. 
+  intros v T1 T2 Hvt.  destruct v; simpl in Hvt; try contradiction.
+    exists i t a. split. 
+      reflexivity.
+      intros va Hvat n. 
+        specialize (Hvt va Hvat n). 
+        destruct (evalF t (aextend i va a) n); simpl; auto.
+Qed.
+
+Lemma vht_inv_rcd :
+  forall v Ls, v ::: TRcd Ls ->
+    exists bs, v = (vrcd bs) /\ bs :::* Ls.
+Proof. 
+  intros v Ls Hvt. destruct v as [ | | | bs]; simpl in Hvt; try contradiction.
+    exists bs. split. 
+      reflexivity.
+      assumption.
+Qed.
+
+(** The following isn't accepted by Coq (and isn't really needed):
+<<
+  Lemma vht_inversion :
+    forall v T (Hvt : v ::: T), 
+      (T=TBool /\ (vht_inv_bool v Hvt))
+      \/ (exists T1 T2, T=TArrow T1 T2 /\ vht_inv_arrow v T1 T2 Hvt)
+      \/ (exists Ls, T=TRcd Ls /\ vht_inv_rcd v Ls Hvt).
+>>
 *)
-Lemma lookup_implies_in:
-  forall x G T,
-    lookup_vdecl x G = Some T -> In (Lv x T) G.
+
+(** The following two lemmas were experiments that didn't work out. 
+    They were intended to make it easier to use a hypothesis of the
+    form [result_ok ... T] 
+    but the inversion one had trouble coming up with [P]
+    and the case one required a complicated [destruct]. *)
+
+Lemma ROk_inversion:
+  forall (P : ef_return -> ty -> Prop),
+    forall er T, 
+      result_ok er T ->
+      (forall vr, vr ::: T -> P (efr_normal vr) T) ->
+      P efr_nogas T ->
+      P er T.
 Proof.
-  introv Hlookup. induction G as [ | [y Ty] G'].
-  Case "G=[]". inversion Hlookup.
-  Case "G=(Lv y Ty)::G'". 
-    apply lookup_cons_case in Hlookup.
-    destruct Hlookup as [[Hxe HTe] | [Hxn Hle]].
-    SCase "y=x". inverts HTe. subst. left. reflexivity.
-    SCase "y<>x". right. apply (IHG' Hle).
+  intros P er T Hok Hnorm Hng. destruct er; simpl in Hok.
+    apply (Hnorm _ Hok).
+    apply Hng.
+    contradiction.
 Qed.
 
-
-(* Doesn't work as [decl_implies_value] is commented out 
-Lemma ctxts_agree_on_lookup_old3 : 
-  forall (x : id) (G : context) (g : rctx) (T : ty),
-    g  :::* G -> 
-    lookup_vdecl x G = Some T ->
-      exists v, alookup x g = Some v /\ v ::: T.
+Lemma ROk_case:
+  forall er T, 
+    result_ok er T -> (
+      (exists vr, er = efr_normal vr /\ vr ::: T) \/
+      er = efr_nogas ).
 Proof.
-  introv HgG HGxT. 
-  apply lookup_implies_in in HGxT. 
-  apply (decl_implies_value _ _ _ _ HGxT HgG).
-(*
-  induction G as [ | [? Ty] G']; introv Hctxts HGxT. 
-    Case "G=[]". inversion HGxT.
-    Case "G=(Lv y Ty)::G'". 
-      destruct g as [ | [y vy] g']. simpl in Hctxts.
-      SCase "g=[]". contradiction.
-      SCase "g=(y;vy)::g'".
-        inversion Hctxts as [? [Het HgG]]; subst; clear Hctxts.
-        destruct (eq_id_dec y x) as [ Heq | Hneq ].
-          SSCase "y=x". subst. exists vy. split.
+  intros er T Hok. destruct er as [vr| | ]; simpl in Hok.
+    left. exists vr. split. reflexivity. apply Hok.
+    right. reflexivity.
+    contradiction.
+Qed.
+
+(** *** Lemma [ctxts_agree_on_lookup] *)
+(** Lemma [ctxts_agree_on_lookup] says that if [bs:::*Ls] and
+    a lookup on [Ls] returns [Some T], then the related lookup on [bs]
+    returns [Some v] where [v:::T]. *)
+
+Lemma ctxts_agree_on_lookup : 
+  forall (Ls : context) (bs : rctx),
+    bs :::* Ls -> 
+    forall (x : id) (T : ty),
+      lookup_vdecl x Ls = Some T ->
+        exists v, alookup x bs = Some v /\ v ::: T.
+Proof.
+  refine (bmd_ind _ _ _).
+    Case "nil". introv Hlk. inverts Hlk.
+    Case "cons". introv Hvt IH Hlk.
+      apply lookup_add_vdecl_case in Hlk. 
+      destruct Hlk as [[Hxe HTe] | [Hxn Hle]].
+        SCase "x=x0". 
+          inversion HTe; subst; clear HTe. 
+          exists v. split.
             apply alookup_cons_eq.
-            assert (Hxxx := (lookup_add_vdecl_eq x Ty G')). unfold add_vdecl in Hxxx.
-              rewrite Hxxx in HGxT. inverts HGxT. apply Het.
-          SSCase "y<>x". 
-            assert (Hxxx := (lookup_add_vdecl_neq x y Ty G' Hneq)). unfold add_vdecl in Hxxx.
-            rewrite Hxxx in HGxT. destruct (IHG' g' T HgG HGxT) as [v [Hlv HvT]].
-            exists v. split.
-              rewrite (alookup_cons_neq _ _ _ _ _ Hneq). apply Hlv. 
-              apply HvT.*)
+            apply Hvt. 
+        SCase "x<>x0". 
+          destruct (IH _ _ Hle) as [v0 [Hlk0 Hvt0]]. 
+          exists v0. split.
+            rewrite (alookup_cons_neq _ _ _ _ _ Hxn). apply Hlk0.
+            apply Hvt0.
 Qed.
-*)
+
 (* Version for when :::* was defined inductively:
 Lemma ctxts_agree_on_lookup_old : 
   forall (x : id) (G : context) (g : rctx) (T : ty),
@@ -536,8 +373,8 @@ Lemma ctxts_agree_on_lookup_old :
       exists v, alookup x g = Some v /\ v ::: T.
 Proof.
   introv Hctxts HGxT. induction Hctxts.
-    Case "TC_nil". inversion HGxT.
-    Case "TC_cons". unfold lookup_vdecl, add_vdecl in HGxT. 
+    Case "BMDs_nil". inversion HGxT.
+    Case "BMDs_cons". unfold lookup_vdecl, add_vdecl in HGxT. 
     destruct (eq_id_dec x0 x).
       SCase "x0=x". subst. inverts HGxT. exists v. split.
         simpl. apply eq_id.
@@ -548,6 +385,23 @@ Proof.
           assumption.
 Qed.
 *)
+
+
+(** *** Lemmas for reasoning about contexts (runtime and typing). *)
+(** No longer used.    *)
+
+Lemma lookup_implies_in:
+  forall x G T,
+    lookup_vdecl x G = Some T -> In (Lv x T) G.
+Proof.
+  introv Hlookup. induction G as [ | [y Ty] G'].
+  Case "G=[]". inversion Hlookup.
+  Case "G=(Lv y Ty)::G'". 
+    apply lookup_add_vdecl_case in Hlookup.
+    destruct Hlookup as [[Hxe HTe] | [Hxn Hle]].
+    SCase "y=x". inverts HTe. subst. left. reflexivity.
+    SCase "y<>x". right. apply (IHG' Hle).
+Qed.
 
 Lemma ctx_tvar_then_some : forall G x T,
   G |- (tvar x) \in T -> lookup_vdecl x G = Some T.
@@ -561,27 +415,27 @@ Proof.
   apply (ctxts_agree_on_lookup G g Hg x T (ctx_tvar_then_some _ _ _ HG)). 
 Qed.
 
-
-(** *** Lemma for reasoning about  (tvar x) / g =>: T. *)
-
 Lemma ctx_tvar_then_evalsto : forall G x T g,
   G |- (tvar x) \in T -> g :::* G -> (tvar x) / g =>: T.
 Proof. 
   introv HG Hg. destruct (ctx_tvar_then_alookup G x T g HG Hg) as [v [Hl Hv]].
-  unfold evaluates_to_a. intro n. destruct n as [ | n' ]; simpl; auto.
+  unfold may_eval_to. intro n. destruct n as [ | n' ]; simpl; auto.
     rewrite Hl. auto.
 Qed.
 
-(** *** Lemma for more easily proving something of the form t / g =>: T *)
+(** *** Lemmas for more easily proving [t / g =>: T] and [Fs / g  =>:* Ls] *)
+(** These lemmas rearrange things so that the calls to [evalF] and 
+    [execF_list] are in hypotheses such that [let_val] and associates 
+    can be applied to them.*)
 
 Lemma evalF_parts :
   forall (t : tm) (T : ty) (g : rctx),
     (forall n' er, evalF t g (S n') = er -> result_ok er T) ->
         t / g  =>: T.
 Proof.
-  introv H. unfold evaluates_to_a. 
+  introv H. unfold may_eval_to. 
   destruct n  as [ | n' ].
-    simpl (evalF _ _ _). unfold result_ok. exact I.
+    simpl (evalF _ _ 0). reflexivity. 
     apply (H n' _ eq_refl).
 Qed.
 
@@ -590,11 +444,20 @@ Lemma execF_list_parts :
     (forall n' er, execF_list Fs g n' = er -> result_list_ok er Ls) ->
         Fs / g  =>:* Ls.
 Proof.
-  introv H. unfold execs_to_decls. apply (fun n' => H n' _ eq_refl).
+  exact (fun _ _ _ H n' => H n' _ eq_refl).
 Qed.
 
 
 (** *** Lemmas for reasoning about LETRT forms. *)
+(** These lemmas are for reasoning about [LETRT] forms.
+    Given a hypothesis, [Hev], of the form [LETRT x <== evalF ... IN ...],
+    applying [let_val] with [Hev] as the appropriate parameter will yield 
+    subgoals that reason about the let- and in- clauses.
+
+    Because [LETRT] is a notation, it is essentially generic in that it can 
+    be used with both [evalF] and [execF_list].  Also the IN clause can be 
+    either a singelton or a list.  However, lemmas are not notations,
+    so there are four lemmas to handle the different cases. *)
 
 Lemma let_val : 
   forall t1 g n' (f : evalue -> ef_return) erf T1 T2,
@@ -629,7 +492,7 @@ Proof.
     introv HLet Heval Hin. 
     specialize (Heval n'). 
     destruct (execF_list Fs g n') as [bs1 | | ]; try (subst erf; auto; fail).
-      Case "result_ok bs1". 
+      Case "result_list_ok bs1". 
         unfold result_list_ok in Heval. 
         apply (Hin bs1 Heval erf HLet).
 Qed.
@@ -667,7 +530,7 @@ Proof.
     introv HLet Heval Hin. 
     specialize (Heval n'). 
     destruct (execF_list Fs1 g n') as [bs1 | | ]; try (subst erf; auto; fail).
-      Case "result_ok bs1". 
+      Case "result_list_ok bs1". 
         unfold result_list_ok in Heval. 
         apply (Hin bs1 Heval erf HLet).
 Qed.
@@ -676,6 +539,16 @@ Qed.
 (* ###################################################################### *)
 (**  ** Proof of soundness of evalF *)
 (**  *** Proof of [evalF_is_sound_yielding_T] *)
+(** This theorem says that if term [t] has type [T],
+    then evaluating [t] will either yield a value of type [T]
+    or not terminate; in particular, it won't get "stuck".
+
+   The proof is by induction on [t] using the custom induction principle
+   so that records are handled correctly.  For each case, the typing relation
+   is inverted to yield type assertions about the components of [t] and
+   [evalF_parts] (or [execF_list_parts]) and [simpl] are applied ending
+   up with the appropriate clause of [evalF] in [Hev].
+*) 
 
   
 Theorem evalF_is_sound_yielding_T : 
@@ -691,44 +564,43 @@ Proof.
     intros n' er Hev; simpl in Hev; subst Q.
 
   Case "ttrue". 
-    exact (TR_Norm _ _ _ Hev TV_True).
+    exact (ROk_Norm _ _ _ Hev VHT_True).
 
   Case "tfalse".
-    exact (TR_Norm _ _ _ Hev TV_False).
+    exact (ROk_Norm _ _ _ Hev VHT_False).
 
   Case "tvar". 
     destruct (ctxts_agree_on_lookup _ _ HGg _ _ H1) as [v [Hlk Hvt]].
-    rewrite Hlk in Hev. exact (TR_Norm _ _ _ Hev Hvt).
-    (* pre "inverts" : apply (ctx_tvar_then_evalsto G x T g Hty HGg).*)
+    rewrite Hlk in Hev. exact (ROk_Norm _ _ _ Hev Hvt).
 
   Case "tapp".
     (* use IHs to get [Ht1 : t1 / g =>: TArrow T11 T] & [Ht2 : t2 / g =>: T11].  *)
     assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
     assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
     (* use the [let_val] lemma with Ht1 and Ht2 to decompose the two LETRT forms *)
-    apply (let_val t1 g n' _ _ (TArrow T1 T) T Hev Ht1); clear Hev Ht1;
+    apply (let_val t1 g n' _ _ _ T Hev Ht1); clear Hev Ht1;
     intros v1 Hv1t erL2 HevL2.
     apply (let_val t2 g n' _ _ _ _ HevL2 Ht2); clear HevL2 Ht2;
     intros v2 Hv2t erf Hevf.
-    assert (Hex := fun_vals _ _ _ Hv1t); clear Hv1t;
-    destruct Hex as (xf & tb & gf & Hv1eq & Hva); subst v1. 
-    apply (TVE_inv _ _ _ (Hva v2 Hv2t) n' _ Hevf).
+    assert (Hex := vht_inv_arrow _ _ _ Hv1t); clear Hv1t;
+    destruct Hex as (xf & tb & gf & Hv1eq & Hva); subst v1 erf.
+    apply (Hva v2 Hv2t n').
 
   Case "tabs". 
-    apply (TR_Norm _ _ _ Hev); clear Hev.
-    apply TV_Abs; intros va Hvat.
+    apply (ROk_Norm _ _ _ Hev); clear Hev.
+    apply VHT_Abs; intros va Hvat.
     apply (IHtb _ _ (aextend x va g) H4). clear IHtb.
-    apply (TC_cons _ _ _ _ _ HGg Hvat).
+    apply (BMDs_cons _ _ _ _ _ HGg Hvat).
 
   Case "trcd". 
     rewrite <- (execF_list_eq Fs g n') in Hev.
     assert (HFs := IHFs _ _ _ H1 HGg); clear IHFs H1.
     apply (let_vlist _ g n' _ _ _ _ Hev HFs); clear Hev HFs;
     intros bs Hbst er2 Hev2. 
-    apply (TR_Norm _ _ _ Hev2 (TV_Rcd _ _ Hbst)).
+    apply (ROk_Norm _ _ _ Hev2 (VHT_Rcd _ _ Hbst)).
 
   Case "trnil".
-    apply (TRL_Norm _ _ _ Hev TC_nil). 
+    apply (RLOk_norm _ _ _ Hev BMDs_nil). 
 
   Case "trcons".
     assert (Ht := IHt _ _ _ H4 HGg); clear IHt H4.
@@ -737,29 +609,30 @@ Proof.
     intros v1 Hv1t erL2 HevL2.
     apply (list_let_vlist _ g n' _ _ Tr _ HevL2 HFs); clear HevL2 HFs;
     intros bs2 Hbs2t erf Hevf. 
-    apply (TRL_Norm _ _ _ Hevf).
-    apply (TC_cons _ _ _ _ _ Hbs2t Hv1t).
+    apply (RLOk_norm _ _ _ Hevf).
+    apply (BMDs_cons _ _ _ _ _ Hbs2t Hv1t).
 
   Case "tproj". 
     assert (Htr := IHtr _ _ _ H2 HGg); clear IHtr H2.
     apply (let_val tr g n' _ _ _ _ Hev Htr); clear Hev Htr; 
     intros vr Hvrt erp Hevp.
-    destruct (rcd_vals _ _ Hvrt) as [bs [? HbsT ]]. subst vr.
+    destruct (vht_inv_rcd _ _ Hvrt) as [bs [? HbsT ]]. subst vr.
     destruct (ctxts_agree_on_lookup _ _ HbsT _ _ H4) as [v [Hlk HvT]].
     rewrite Hlk in Hevp. 
-    apply (TR_Norm _ _ _ Hevp HvT).
+    apply (ROk_Norm _ _ _ Hevp HvT).
 
   Case "tif".
     assert (Hti := IHti _ _ _ H3 HGg); clear IHti H3.
     apply (let_val ti g n' _ _ _ _ Hev Hti); clear Hev Hti;
     intros vi Hvit erc Hevc.
-    destruct (bool_vals vi Hvit); subst.
+    destruct (vht_inv_bool vi Hvit); subst.
       SSCase "v = vtrue". apply (IHtt _ _ _ H5 HGg n').
       SSCase "v = vfalse". apply (IHte _ _ _ H6 HGg n').
 
 Qed.
 
 (**  *** Proof of [evalF_is_sound] *)
+(** This says that if [t] is well-typed, its evaluation will not get stuck. *)
 
 Corollary evalF_is_sound: 
   forall (t : tm) (G : context) (T : ty) (g : rctx) (n : nat),
@@ -767,8 +640,8 @@ Corollary evalF_is_sound:
 Proof.
   introv Hty HGg.
   assert (Hr := evalF_is_sound_yielding_T _ _ _ _ Hty HGg n).
-  destruct (evalF t g n); [ discriminate | discriminate |
-     unfold result_ok in Hr; contradiction] .
+  destruct (evalF t g n); try discriminate.
+     simpl in Hr; contradiction.
 Qed.
 
 End LEProps.
