@@ -175,6 +175,35 @@ Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
       end
   end.
 
+(** Pull out [execF_list] and prove that it's equivalent to the inner fixpoint. *)
+
+Fixpoint execF_list (Fs : list def) (g : rctx) (gas' : nat) : xf_return := 
+      match Fs with
+        | nil => efr_normal nil
+        | (Fv x t) :: Fs' =>
+            LETRT v <== evalF t g gas' IN
+              LETRT bs' <== execF_list Fs' g gas' IN 
+                efr_normal (aextend x v bs')
+      end.
+
+Lemma execF_list_eq :
+  forall (Fs : list def) (g : rctx) (n' : nat),
+    execF_list Fs g n' = 
+    ((fix execF_list (Fs0 : list def) : xf_return :=
+           match Fs0 with
+           | nil => efr_normal nil
+           | Fv x t :: Fs' =>
+               LETRT v <== evalF t g n'
+               IN LETRT bs' <== execF_list Fs'
+                  IN efr_normal (aextend x v bs')
+           end) Fs).
+Proof.
+  intros. induction Fs as [ |F Fs'].
+    Case "Fs=[]". reflexivity.
+    Case "Fs=F::Fs'". simpl. destruct F as [x t].
+      rewrite <- IHFs'. reflexivity.
+Qed.
+
 (* DOESN'T WORK :
 Fixpoint evalF (t : tm) (g : rctx) (gas : nat) {struct gas} : ef_return :=
   match gas with
