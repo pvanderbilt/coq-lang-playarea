@@ -300,13 +300,12 @@ Proof with eauto 15.
      from the IHs, with the exception of tvar and tabs, which
      aren't automatic because we must reason about how the
      variables interact. *)
-  Ltac spt_induction t x v U := induction t using tm_xrect with 
-    (Q := fun r =>
+
+  set (Q := fun r =>
       forall (RT : list decl) (Gamma : context),
         add_vdecl x U Gamma |- r *\in RT -> 
         Gamma |- (subst_rcd x v r) *\in RT).
-  t_xcases (spt_induction t x v U) Case; 
-    intros S Gamma Htypt; simpl; inverts Htypt...
+  tm_xind_tactic t Q Case; intros S Gamma Htypt; simpl; subst Q; inverts Htypt...
 
   Case "tvar".
     simpl. rename x0 into y.
@@ -336,7 +335,7 @@ Proof with eauto 15.
       apply T_Var... unfold add_vdecl, lookup_vdecl in H1. rewrite neq_id in H1...
 
   Case "tabs".
-    rename x0 into y. rename T into T1.
+    rename x0 into y. rename Tx into T1.
     (* If [t = tabs y T1 t0], then we know that
          [Gamma,x:U |- tabs y T11 t0 : T1->T2]
          [Gamma,x:U,y:T1 |- t0 : T2]
@@ -367,7 +366,7 @@ Proof with eauto 15.
          [Gamma,x:U,y:T1 |- t : T2]       =>
          [Gamma,y:T11,x:U |- t : T2]      =>
          [Gamma,y:T11 |- [x:=v]t : T2] *)
-      apply IHt. eapply context_invariance...
+      apply IHtb. eapply context_invariance...
       intros z Hafi. unfold add_vdecl, lookup_vdecl.
       destruct (eq_id_dec y z)... 
       subst. rewrite neq_id...
@@ -377,7 +376,7 @@ Proof with eauto 15.
        the goal is in a form that doesn't match, so
        we use a special lemma to get it back into a form
        that eauto can handle. *)
-    rewrite <- (subst_rcd_eqv x v rb)... 
+    rewrite <- (subst_rcd_eqv x v Fs)... 
 
   Case "trcons". (* TBD: Why doesn't this work automatically? *)
     apply TR_Cons...
