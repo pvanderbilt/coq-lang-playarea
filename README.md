@@ -36,7 +36,7 @@ The main files are:
 
 - [LEProps.v](LEProps.v): The main content is a proof that `evalF`, 
 	when applied a well-typed term, either yields a value of that type 
-	or "runs out of gas"; it does not get stuck.  
+	or "runs out of gas"; it does not get stuck.
 	Soundness, as defined above, follows directly.
 	This file also defines:
 	- a `value_has_type` relation (`v ::: T`) that relates `(v : evalue)` instances 
@@ -49,7 +49,7 @@ The main files are:
 	- lemmas for reasoning about contexts and lookup;
 	- lemmas that simplify later proofs.
 	
-	The relations are defined as fixpoints to get around the problem with LEProps3.
+	The relations are defined as fixpoints to get around the problems identified in LEProps3.
 	However, there is some Coq-imposed ugliness that would be nice to clean up.
 
 - [LEProps3.v](LEProps3.v): This is an earlier attempt at soundness using an inductive 
