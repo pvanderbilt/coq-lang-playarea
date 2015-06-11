@@ -16,9 +16,7 @@ as defined in Coq and extends it in various ways:
 	and a record type contains a list of declarations.
 	Defined custom recursion and induction principles.
 	Also changed the typing context to be a list of declarations.
-	(Currently the soundness wrt `evalF` is broken.)
-	See [LDef.v](LDef.v) and [LProps.v](LProps.v).
-
+	See [LDef.v](LDef.v), [LProps.v](LProps.v), [LEval.v](LEval.v) and [LEProps.v](LEProps.v).
 
 To use this software:
 
@@ -43,7 +41,7 @@ The main files are:
 	This file also defines:
 	- a `value_has_type` relation (`v ::: T`) that relates `(v : evalue)` instances 
 		and STLC types (`T : ty`);
-	- an `evaluates_to_a` relation (`t / g =>: T`) that says `evalF` on term `t` 
+	- a `may_eval_to` relation (`t / g =>: T`) that says `evalF` on term `t` 
 		with runtime-context `g` will either run out of gas or 
 		yield a value of type `T`;
 	- other relations;
@@ -56,19 +54,23 @@ The main files are:
 
 - [LEProps3.v](LEProps3.v): This is an earlier attempt at soundness using an inductive 
 	relation for `value_has_type`. However, it ran into a problem with Coq's 
-	"Non strictly positive occurrence" error.  
+	"Non strictly positive occurrence" error.
 	Using admitted (faked) lemmas to get around this
-	problem, the soundness theorem goes through.  
+	problem, the soundness theorem goes through.
+	However, it has not been updated to handle records.
 
 - [LDef.v](LDef.v): This started as SF's Stlc.v with non-essential material removed. 
 	Records have been added along with definitions
 	and declarations.  The typing context is now a list of declarations.
 
-	Note that this approach to records differs from that of SF's Records.v which "flattens"
+Notes:
+
+-	This approach to records differs from that of SF's Records.v which "flattens"
 	records into the other elements, so, for example, a term could be `(trcons x ttrue tfalse)`,
 	which does not make sense. To deal with this, they define a predicate, `well_formed_tm`, that
 	ensures that the final term of `trcons` is either `trnil` or another `trcons`.
-	The approach given here has `trcons` containing a list of identifier/term pairs,
+	
+	The approach given here has `trcons` containing a list of definitions (identifier/term pairs),
 	with custom induction principles provided to make up for the 
 	weak ones defined automatically by Coq.
 
