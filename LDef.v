@@ -284,8 +284,9 @@ Tactic Notation "t_xcases" tactic(first) ident(c) :=
 
 Ltac tm_xind_tactic t Qv C := 
   t_xcases (induction t 
-    as [ | | ?x | ?t1 ?IHt1 ?t2 ?IHt2 | ?x ?Tx ?tb ?IHtb | ?Fs ?IHFs | | ?x ?tx ?Fs ?IHt ?IHFs 
-         | ?tr ?IHtr ?x | ?ti ?IHti ?tt ?IHtt ?te ?IHte ]
+    as [ | | ?x | ?t1 ?IHt1 ?t2 ?IHt2 | ?x ?Tx ?tb ?IHtb | ?Fs ?IHFs | 
+         | ?x ?tx ?Fs ?IHt ?IHFs | ?tr ?IHtr ?x 
+         | ?ti ?IHti ?tt ?IHtt ?te ?IHte ]
     using tm_xrect with (Q:=Qv)) C.
 
 
@@ -571,7 +572,7 @@ Inductive has_type : context -> tm -> ty -> Prop :=
   | T_Abs : forall Gamma x T1 T2 tb,
       add_vdecl x T1 Gamma |- tb \in T2 -> 
       Gamma |- (tabs x T1 tb) \in (TArrow T1 T2)
-  | T_App : forall T1 T2 Gamma t1 t2,
+  | T_App : forall Gamma T1 T2 t1 t2,
       Gamma |- t1 \in (TArrow T1 T2) -> 
       Gamma |- t2 \in T1 -> 
       Gamma |- (tapp t1 t2) \in T2
@@ -586,7 +587,7 @@ Inductive has_type : context -> tm -> ty -> Prop :=
        Gamma |- ttrue \in TBool
   | T_False : forall Gamma,
        Gamma |- tfalse \in TBool
-  | T_If : forall t1 t2 t3 T Gamma,
+  | T_If : forall Gamma t1 t2 t3 T,
        Gamma |- t1 \in TBool ->
        Gamma |- t2 \in T ->
        Gamma |- t3 \in T ->
@@ -627,6 +628,16 @@ Tactic Notation "has_type_xcases" tactic(first) ident(c) :=
   | Case_aux c "T_True" | Case_aux c "T_False" | Case_aux c "T_If"
   | Case_aux c "TR_Nil" | Case_aux c "TR_Cons" ].
 
+Ltac has_type_xind_tactic Hht Qv C := 
+  has_type_xcases (induction Hht 
+    as [ ?Gamma ?x ?T ?Hlk | ?Gamma ?x ?T1 ?T2 ?tb ?Htb ?IHHtb
+         | ?Gamma ?T1 ?T2 ?t1 ?t2 ?Ht1 ?IHHt1 ?Ht2 ?IHHt2 
+         | ?Gamma ?tr ?Tr ?Htr ?IHHtr 
+         | ?Gamma ?x ?t ?Tx ?Tr ?Ht ?IHHt ?Hlk
+         | ?Gamma | ?Gamma 
+         | ?Gamma ?tb ?tt ?te ?T ?Htb ?IHHtb ?Htt ?IHHtt ?Hte ?IHHte
+         | ?Gamma | ?Gamma ?x ?t ?T ?tr ?Tr ?Ht ?IHHt ?Htr ?IHHtr ]
+    using has_type_xind with (P0:=Qv)) C.
 
 
 End LDEF.

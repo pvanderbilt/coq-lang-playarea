@@ -79,11 +79,11 @@ Proof with eauto.
   intros t T Ht.
   remember (empty) as Gamma.
   generalize dependent HeqGamma.
-  Ltac p_ind_tactic Ht := induction Ht using has_type_xind
-    with (P0 := fun G tr Tr => 
+
+  set (Q := fun G tr (Tr : list decl) => 
        G = empty -> 
        value_rcd tr \/ (exists tr', tr *==> tr')).
-  has_type_xcases (p_ind_tactic Ht) Case; intros HeqGamma; subst; 
+  has_type_xind_tactic Ht Q Case; intros HeqGamma; subst; subst Q;
     try (left; auto; fail).
      (* the [try  (left; auto; fail)] tactic handles the value cases 
       (T_Abs, T_True, T_False, TR_Nil) *)
@@ -92,7 +92,7 @@ Proof with eauto.
     (* The final rule in the given typing derivation cannot be [T_Var],
        since it can never be the case that [empty |- x : T] (since the
        context is empty). *)
-    inversion H.
+    inversion Hlk.
 
   Case "T_App".
     (* If the last rule applied was T_App, then [t = t1 t2], and we know 
@@ -125,7 +125,7 @@ Proof with eauto.
        [t = (trcd tr)], [T=(Trcd Tr)] and [empty |- tr *: Tr]. 
       The combined induction rule requires that P0->P 
       which is what we establish here. *)
-    destruct (IHHt eq_refl) as [Hv | [tr' Hst]]; clear IHHt.
+    destruct (IHHtr eq_refl) as [Hv | [tr' Hst]]; clear IHHtr.
       SCase "value_rcd tr". left. apply (v_rcd _ Hv).
       SCase "tr *==> tr". right. exists (trcd tr'). apply (ST_Rcd _ _ Hst).
 
@@ -140,24 +140,24 @@ Proof with eauto.
       inverts Ht; try solve by inversion...
       (* Lemma [rcd_field_lookup] shows that [lookup_vdef x tr = Some vx] for
          some [vx].*)
-      destruct (rcd_field_lookup _ _ _ Tx H4 H) as [vx [Hlxr Htx]].
+      destruct (rcd_field_lookup _ _ _ Tx H3 Hlk) as [vx [Hlxr Htx]].
       (* So [tproj x t ==> vx] by [ST_ProjRcd] with the inversion of H0
          to get that [vx] is a value.  *)
-      exists vx. inverts H0 as H0. apply (ST_ProjRcd _ _ _ H0 Hlxr).
+      exists vx. inverts H as Hvr. apply (ST_ProjRcd _ _ _ Hvr Hlxr).
     SCase "t steps".
       (* On the other hand, if [t ==> t'], then [tproj t x ==> tproj t' x]
          by [ST_Proj1]. *)
-      destruct H0 as [t' Hstp]. exists (tproj t' x)...
+      destruct H as [t' Hstp]. exists (tproj t' x)...
 
   Case "T_If".
-    right. destruct IHHt1...
+    right. destruct IHHtb...
 
-    SCase "t1 is a value".
-      inverts H; try inversion Ht1; eauto.
-      (* destruct (canonical_forms_bool t1); subst; eauto.*)
+    SCase "tb is a value".
+      inverts H; try inversion Htb; eauto.
+      (* destruct (canonical_forms_bool tb); subst; eauto.*)
 
-    SCase "t1 steps".
-      inversion H as [t1' Hstp]. exists (tif t1' t2 t3)...
+    SCase "tb steps".
+      inversion H as [tb' Hstp]. exists (tif tb' tt te)...
 
   Case "TR_Cons".
     (* If the last rule was [T_Rcd] established by [TR_Cons], then 
@@ -169,7 +169,7 @@ Proof with eauto.
         by the P0 IH, either tr is a value or it steps. *)
     destruct (IHHt eq_refl) as [Hvt | [t' Hstt']]; clear IHHt.
       SSCase "value t". 
-          destruct (IHHt0 eq_refl) as [Hvtr | [tr' Hsttr']]; clear IHHt0.
+          destruct (IHHtr eq_refl) as [Hvtr | [tr' Hsttr']]; clear IHHtr.
         SSSCase "value_rcd tr". 
           left. apply (vr_cons _ _ _ Hvt Hvtr).
         SSSCase "tr *==> tr'". 
@@ -233,17 +233,14 @@ Lemma free_in_context : forall x t T Gamma,
    exists T',  lookup_vdecl x Gamma = Some T'.
 Proof with eauto.
   intros x t T Gamma Hafi Htyp.
-  Ltac fic_ind_tactic H x := induction H using has_type_xind with 
-    (P0 := fun Gamma r RS => 
+  has_type_xind_tactic Htyp 
+    (fun Gamma r (RS : list decl) => 
       appears_free_in_rcd x r ->
-      Gamma |- r *\in RS ->
-      exists T', lookup_vdecl x Gamma = Some T').
-  has_type_xcases (fic_ind_tactic Htyp x) Case; 
-    inversion Hafi; subst...
+      exists T', lookup_vdecl x Gamma = Some T'
+    ) Case; inversion Hafi; subst...
   Case "T_Abs".
-    destruct IHHtyp as [T' Hctx]... exists T'.
-    unfold add_vdecl, lookup_vdecl in Hctx. 
-    rewrite neq_id in Hctx... 
+    destruct IHHtb as [T' Hctx]... exists T'.
+    rewrite (lookup_add_vdecl_neq _ _ T1 Gamma H2) in Hctx...
 Qed.
 
 (**  If a term is typable in the empty context it must be closed. *)
@@ -268,17 +265,16 @@ Lemma context_invariance : forall Gamma Gamma' t S,
      Gamma' |- t \in S.
 Proof with eauto 15.
   intros. generalize dependent Gamma'.
-  Ltac ci_ind_tactic H := induction H using has_type_xind with 
-    (P0 := fun Gamma r RS => 
+  set (P0 := fun Gamma r RS => 
       forall Gamma' : context,
       (forall x : id, appears_free_in_rcd x r -> 
                       lookup_vdecl x Gamma = lookup_vdecl x Gamma') ->
       Gamma' |- r *\in RS).
-  has_type_xcases (ci_ind_tactic H) Case; intros Gamma' Heqv...
+  has_type_xind_tactic H P0 Case; intros Gamma' Heqv; subst P0...
   Case "T_Var".
     apply T_Var... rewrite <- Heqv...
   Case "T_Abs".
-    apply T_Abs... apply IHhas_type. intros y Hafi.
+    apply T_Abs... apply IHHtb. intros y Hafi.
     unfold add_vdecl, lookup_vdecl. destruct (eq_id_dec x y)...
 Qed.
 
@@ -401,12 +397,11 @@ Proof with eauto.
   (* Proof: By induction on the given typing derivation.  Many cases are
      contradictory ([T_Var], [T_Abs]) or follow directly from the IH
      ([T_RCons]).  We show just the interesting ones. *)
-  Ltac pres_ind_tactic HT := induction HT using has_type_xind
-    with (P0 := fun Gamma tr Tr => forall tr' : list def,
+  set (P0 := fun Gamma tr Tr => forall tr' : list def,
        Gamma = empty -> 
        tr *==> tr' ->
        Gamma |- tr' *\in Tr).
-  has_type_xcases (pres_ind_tactic HT) Case;
+  has_type_xind_tactic HT P0 Case;
     introv HeqGamma HE; subst; inverts HE... 
 
   Case "T_App".
@@ -427,7 +422,7 @@ Proof with eauto.
              [empty |- v2 : T1]
          by assumption, so we are done. *)
       apply substitution_preserves_typing with T1...
-      inversion HT1...
+      inversion Ht1...
 
   Case "T_Proj".
     (* If the last rule was [T_Proj], then [t = tproj t0 x] 
@@ -441,9 +436,9 @@ Proof with eauto.
        Inverting Ht gives [r *: Tr] and we can apply lemma
        [rcd_field_lookup] to find the record element this
        projection steps to. *)
-    inverts HT.
-    destruct (rcd_field_lookup _ _ _ _ H5 H) as [vx [ Hlxr Htx]].
-    rewrite H4 in Hlxr. inversion Hlxr...
+    inverts Ht.
+    destruct (rcd_field_lookup _ _ _ _ H4 Hlk) as [vx [ Hlxr Htx]].
+    rewrite H3 in Hlxr. inversion Hlxr...
 
 Qed.
 
