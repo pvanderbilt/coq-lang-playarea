@@ -8,7 +8,7 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef LProps.
-Import P3Common LDEF LProps.
+Import Common LDef LProps.
 
 (* TBD: Try some of these attempts at making the lookup stuff more generic:
 

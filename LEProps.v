@@ -11,9 +11,7 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef LEval.
-Import P3Common LDEF LEVAL.
-
-Module LEProps.
+Import Common LDef LEval.
 
 (* ###################################################################### *)
 (** ** Relations between values, types and evalF. *)
@@ -643,5 +641,3 @@ Proof.
   destruct (evalF t g n); try discriminate.
      simpl in Hr; contradiction.
 Qed.
-
-End LEProps.

@@ -5,10 +5,8 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef.
-Import P3Common.
+Import Common LDef.
 
-Module LProps.
-Import LDEF.
 
 (* ###################################################################### *)
 (** ** Progress *)
@@ -469,5 +467,3 @@ Proof.
       apply IHHmulti; try assumption.
       apply (preservation _ _ _ Hhas_type Hxy).
 Qed.
-
-End LProps.

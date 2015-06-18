@@ -8,9 +8,7 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef.
-Import P3Common LDEF.
-
-Module LEVAL.
+Import Common LDef.
 
 (* ###################################################################### *)
 (** ** Values (type [evalue]) *)
@@ -238,4 +236,3 @@ with evalF' (t : tm) (e : rctx) (gas' : nat) {struct gas'} : ef_return :=
   end.
 *)
 
-End LEVAL.

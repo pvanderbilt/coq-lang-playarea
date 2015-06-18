@@ -11,9 +11,8 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef LEval.
-Import P3Common LDEF LEVAL.
+Import Common LDef LEval.
 
-Module LEProps3.
 
 (* ###################################################################### *)
 
@@ -276,5 +275,3 @@ Proof.
         SSCase "vtrue". inverts Htt as Hokt.  specialize (Hokt n'). rewrite Hev in Hokt. apply Hokt.
         SSCase "vfalse". inverts Hte as Hoke.  specialize (Hoke n'). rewrite Hev in Hoke. apply Hoke.
 Qed.
-
-End LEProps3.

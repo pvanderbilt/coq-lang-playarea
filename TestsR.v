@@ -7,9 +7,7 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef.
-Import P3Common LDEF.
-
-Module RETests.
+Import Common LDef.
 
 (** Some variables, for examples... *)
 
@@ -111,4 +109,3 @@ Example typing_nonexample_2 : forall y,
 Proof.
   (* FILL IN HERE *) Admitted.
 
-End RETests.

@@ -4,7 +4,7 @@
 
 Load Init.
 Require Export LDef.
-Import LDEF.
+Import LDef.
 
 (** *** Definitions *)
 

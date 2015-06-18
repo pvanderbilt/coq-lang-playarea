@@ -8,9 +8,8 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common.
-Import P3Common.
+Import Common.
 
-Module LDEF.
 
 (* ###################################################################### *)
 
@@ -639,5 +638,3 @@ Ltac has_type_xind_tactic Hht Qv C :=
          | ?Gamma | ?Gamma ?x ?t ?T ?tr ?Tr ?Ht ?IHHt ?Htr ?IHHtr ]
     using has_type_xind with (P0:=Qv)) C.
 
-
-End LDEF.
