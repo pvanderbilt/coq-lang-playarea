@@ -363,11 +363,11 @@ Proof with eauto 15.
   set (Q := fun F =>
       forall (L : decl) (Gamma : context),
         def_yields (add_vdecl x U Gamma) F L -> 
-        def_yields Gamma (subst_def x v F) L).
-  set (QL := fun r =>
+        def_yields Gamma ([x:<=v]F) L).
+  set (QL := fun Fs =>
       forall (RT : list decl) (Gamma : context),
-        add_vdecl x U Gamma |-- r *\in RT -> 
-        Gamma |-- (subst_rcd x v r) *\in RT).
+        add_vdecl x U Gamma |-- Fs *\in RT -> 
+        Gamma |-- ([x:<=v]* Fs) *\in RT).
   tm_xind_tactic t Q QL Case; intros S Gamma Htypt;  
     subst Q QL; inverts Htypt; try (simpl; eauto 15; fail).
 
@@ -433,10 +433,6 @@ Proof with eauto 15.
       intros z Hafi. simpl. destruct (eq_id_dec y z)... 
       subst. rewrite neq_id...
 
-  Case "trcd". 
-    rewrite (subst_trcd x v Fs).
-    apply (T_Rcd _ _ _ (IHFs _ _ H1)).
-
   Case "tlet".
     destruct F as [z Tz].
     simpl. eapply T_Let.
@@ -452,9 +448,6 @@ Proof with eauto 15.
             simpl. 
             destruct (eq_id_dec z y); destruct (eq_id_dec x y); subst...
               destruct Hne; reflexivity.
-
-  Case "Fs_cons". (* TBD: Why doesn't this work automatically? *)
-    simpl. inverts H2. apply TR_Cons...
 Qed.
 
 (** *** The Preservation Theorem *)

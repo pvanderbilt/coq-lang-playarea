@@ -340,98 +340,35 @@ Ltac tm_xind_tactic tv Qv QLv C :=
 (** ** Reduction *)
 (** *** Substitution *)
 
-(**  Coq complains when [subst] is defined with [Fixpoint ... with] 
-     as it cannot figure out that the term is not increasing in the 
-     [with] clause.  While [subst] can be defined using the custom
-     recursion defined above, in proofs it simplifies to a mess 
-     that I can't fold back up.
-     Instead, [subst] is defined with a nested fixpoint, as follows: 
-*)
-
 Reserved Notation "'[' x ':=' s ']' t" (at level 20).
-Reserved Notation "'[' x ':=' s ']*' r" (at level 20).
+Reserved Notation "'[' x ':<=' s ']' t" (at level 20).
+Reserved Notation "'[' x ':<=' s ']*' Fs" (at level 20).
 
 Fixpoint subst (x:id) (s:tm) (t:tm) {struct t} : tm :=
-  let fix rsubst (a: list def) : list def := 
-    match a with
-      | nil => nil 
-      | (Fv i t) :: r' => (Fv i ([x:=s] t)) :: (rsubst r')
-    end
-  in
   match t with
     | ttrue => ttrue
     | tfalse => tfalse
     | tvar y => if eq_id_dec x y then s else t
     | tabs y T t1 =>  tabs y T (if eq_id_dec x y then t1 else ([x:=s] t1))
     | tapp t1 t2 => tapp ([x:=s] t1) ([x:=s] t2)
-    | trcd r => trcd (rsubst r)
+    | trcd Fs => trcd ([x:<=s]* Fs)
     | tproj t1 i => tproj ([x:=s] t1) i
     | tif t1 t2 t3 => tif ([x:=s] t1) ([x:=s] t2) ([x:=s] t3)
     | tlet (Fv y ty) tb => tlet (Fv y ([x:=s] ty))
                                 (if eq_id_dec x y then tb else ([x:=s] tb))
   end
 
-where "'[' x ':=' s ']' t" := (subst x s t).
+with subst_def (x:id) (s:tm) (F:def) : def :=
+  match F with (Fv i t) => (Fv i ([x:=s] t)) end
+
+where "'[' x ':=' s ']' t" := (subst x s t)
+and "'[' x ':<=' s ']' F" := (subst_def x s F)
+and "'[' x ':<=' s ']*' Fs" := (map (subst_def x s) Fs).
 
 (**  This substitution assumes that [s] is closed,
      which is OK since the step relation is only defined on closed terms.
      This would need to change if [s] was allowed to have free variables.*)
 
-(**  In order to make the nested fixpoint visible, it is defined again as
-     [subst_rcd] and a lemma is given that supports rewriting the nested
-     fixpoint to it. *)
-
-Fixpoint subst_rcd (x:id) (s:tm) (a: list def) : list def := 
-  match a with
-    | nil => nil 
-    | (Fv i t) :: rb' => (Fv i ([x:=s] t)) :: ([x:=s]* rb')
-  end
-
-where "'[' x ':=' s ']*' r" := (subst_rcd x s r).
-
-Lemma subst_rcd_eqv :
-  forall x s a,
-    [x := s]* a =
-    ((fix rsubst (a0 : list def) : list def :=
-         match a0 with
-         | nil => nil
-         | (Fv i t) :: r' => (Fv i ([x := s]t)) :: (rsubst r')
-         end) a).
-Proof.
-  intros. induction a.
-    reflexivity.
-    simpl. rewrite <- IHa. reflexivity.
-Qed.
-
-Lemma subst_trcd: 
-  forall x s Fs,
-    [x := s](trcd Fs) = trcd ([x := s]* Fs).
-Proof.
-  intros x s Fs. simpl. apply f_equal. induction Fs.
-    reflexivity.
-    simpl. rewrite <- IHFs. reflexivity.
-Qed. 
-
-Definition subst_def (x:id) (s:tm) (F: def) : def := 
-  match F with
-    | (Fv i t) => (Fv i ([x:=s] t))
-  end.
-
-(*
-Lemma subst_def_eqv :
-  forall x s F,
-    subst_def x s F =
-    ((fix rsubst (a0 : list def) : list def :=
-         match a0 with
-         | nil => nil
-         | (Fv i t) :: r' => (Fv i ([x := s]t)) :: (rsubst r')
-         end) F).
-Proof.
-  intros. induction a.
-    reflexivity.
-    simpl. rewrite <- IHa. reflexivity.
-Qed.
-*)
 (* ###################################################################### *)
 
 
