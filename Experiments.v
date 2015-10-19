@@ -8,7 +8,202 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef LProps.
-Import P3Common LDEF LProps.
+Import Common LDef LProps.
+
+Lemma len_zero_is_empty: forall (T: Type) (l : list T),
+                           length l = 0 -> l = nil.
+Proof.
+  intros T l Hl0. destruct l.
+    reflexivity.
+    inversion Hl0.
+Qed.
+
+(* Print len_zero_is_empty. *)
+
+Lemma zero_neq_one: (0=1) -> False.
+Proof. intro.
+inversion H.       
+Qed.
+(* This generates: *)
+Definition zero_neq_one_generated : 0 = 1 -> False := 
+fun H : 0 = 1 =>
+(fun H0 : 1 = 1 -> False => H0 eq_refl)
+  match H in (_ = y) return (y = 1 -> False) with
+  | eq_refl =>
+      fun H0 : 0 = 1 =>
+      (fun H1 : 0 = 1 =>
+       (fun H2 : False => (fun H3 : False => False_ind False H3) H2)
+         (eq_ind 0
+            (fun e : nat => match e with
+                            | 0 => True
+                            | S _ => False
+                            end) I 1 H1)) H0
+  end.
+
+(* My hand-generated version: *)
+Definition zero_neq_one' : 0 = 1 -> False :=
+  fun H : 0 = 1 =>
+    let P (n : nat) :=
+      match n with
+        | 0 => True
+        | S _ => False
+      end
+    in (eq_ind 0 P I 1 H).
+
+(* Note: match is used to implement nat_rect, not the other way around. *)
+
+Definition zero_neq_succ : forall m: nat, ~ 0 = S m :=
+  fun m : nat =>
+    fun H : 0 = (S m) =>
+      let P (n : nat) :=
+        match n with
+          | 0 => True
+          | S _ => False
+        end
+      in eq_ind 0 P I (S m) H.
+
+
+(* Inductive eq (A : Type) (x : A) : A -> Prop :=  eq_refl : x = x 
+eq_ind = 
+fun (A : Type) (x : A) (P : A -> Prop) => eq_rect x P
+     : forall (A : Type) (x : A) (P : A -> Prop),
+       P x -> forall y : A, x = y -> P y
+*)
+(*
+False_ind = fun P : Prop => False_rect P
+     : forall P : Prop, False -> P *)
+
+
+Definition list_hd0 {T : Type} (l : list T) (p1 : length l > 0) : T.
+  (* refine (match l with nil => _ | cons hd _ => hd end). *)
+  (* case l; intros. *)
+  (* destruct l. *)
+  case_eq l; intros; subst l.
+  (* generalize dependent p1. case l; intros. *)
+      apply (False_rect _ (le_Sn_0 _ p1)).
+      exact t.
+Defined.
+(* Print list_hd0. *)
+
+Definition list_hd0'' {T : Type} (l : list T) : (length l > 0) -> T.
+  (* refine (match l with nil => _ | cons hd _ => hd end). *)
+  (* case l; intros. *)
+  (* destruct l. *)
+  (* case_eq l; intros; subst l. *)
+  (* generalize dependent p1. *)
+  refine (match l with nil => fun p1' => _ | cons hd _ => fun _ => hd end).
+  exact (False_rect _ (le_Sn_0 _ p1')).
+Defined.
+(* Print list_hd0''. *)
+
+Definition list_hd0' {T : Type} (l : list T) (p1 : length l > 0) : T.
+  (* refine (match l with nil => _ | cons hd _ => hd end). *)
+  (* case l; intros. *)
+  (* destruct l. *)
+  (* case_eq l; intros; subst l. *)
+  generalize dependent p1.
+  refine (match l with nil => fun p1' => _ | cons hd _ => fun _ => hd end).
+  exact (False_rect _ (le_Sn_0 _ p1')).
+Defined.
+
+  (* NOTES: 
+         case l // loses connection of l to [] (needs intros.)
+         case_eq // adds appropriate equation, l=[], but needs intros and subst.
+                        gens code with a bunch of eq_rect_r calls.
+         destruct l ==  case_eq l; intros; subst l.
+         generalize dependent p1. // makes goal a function from p1; needs intros.
+*)
+  
+
+Definition list_hd'' {T : Type} (l : list T) (p1 : length l > 0) : T.
+  destruct l.
+  (* refine (match l with nil => _ | cons hd tl => hd end). *)
+  unfold length in p1. unfold gt in p1. unfold lt in p1.
+  apply le_Sn_0 in p1. inversion p1.
+  apply t.
+Defined.
+(* Print list_hd''. *)
+
+Definition list_hd' {T : Type} (l : list T) (p1 : length l > 0) : T :=
+  match l as l' return (length l' > 0 -> T) with
+    | nil => (fun p1' => match (le_Sn_0 (length [] (A:=T)) p1') with end)
+    | hd :: _ => fun _ => hd
+  end p1.
+(* Print list_hd'. *)
+
+Definition list_hd {T : Type} (l : list T) (p1 : length l > 0) : T :=
+  list_rect (fun l => (length l > 0) -> T)
+            (fun p1 => False_rect T (le_Sn_0 (length (A:=T) []) p1))
+            (fun hd _ _ _ => hd)
+            l p1.
+
+Definition list_hd_ne {T : Type} (l : list T) (p1 : length l <> 0) : T :=
+  match l as l' return (length l' <> 0 -> T) with
+    | nil => (fun p1' => match (p1' eq_refl) with end)
+    | hd :: _ => fun _ => hd
+  end p1.
+
+(*
+ex_falso_quodlibet  = 
+fun (P : Prop) (contra : False) =>
+(fun H : P => H) match contra return P with
+                 end
+: forall P : Prop, False -> P
+
+False_rect = 
+fun (P : Type) (f : False) => match f return P with
+                              end
+     : forall P : Type, False -> P 
+ *)
+
+(*
+le_Sn_0 = 
+fun (n : nat) (H : S n <= 0) =>
+le_ind (S n) (fun n0 : nat => IsSucc n0) I
+  (fun (m : nat) (_ : S n <= m) (_ : IsSucc m) => I) 0 H
+     : forall n : nat, ~ S n <= 0
+
+Inductive le (n : nat) : nat -> Prop :=
+    le_n : n <= n | le_S : forall m : nat, n <= m -> n <= S m
+
+le_ind = 
+fun (n : nat) (P : nat -> Prop) (f : P n)
+  (f0 : forall m : nat, n <= m -> P m -> P (S m)) =>
+fix F (n0 : nat) (l : n <= n0) {struct l} : P n0 :=
+  match l in (_ <= n1) return (P n1) with
+  | le_n => f
+  | le_S m l0 => f0 m l0 (F m l0)
+  end
+     : forall (n : nat) (P : nat -> Prop),
+       P n ->
+       (forall m : nat, n <= m -> P m -> P (S m)) ->
+       forall n0 : nat, n <= n0 -> P n0
+
+list_rect = 
+fun (A : Type) (P : list A -> Type) (f : P [])
+  (f0 : forall (a : A) (l : list A), P l -> P (a :: l)) =>
+fix F (l : list A) : P l :=
+  match l as l0 return (P l0) with
+  | [] => f
+  | y :: l0 => f0 y l0 (F l0)
+  end
+     : forall (A : Type) (P : list A -> Type),
+       P [] ->
+       (forall (a : A) (l : list A), P l -> P (a :: l)) ->
+       forall l : list A, P l
+*)
+
+Lemma le_Sn_0 : forall n : nat, ~ S n <= 0.
+  intros n Hle. admit.
+Qed.
+
+(*
+Fixpoint list_index {T : Type} (l : list T) (k : nat) (p: k < length l) : T
+  := match (k, l) with
+       | (0, x::_) => x
+       | (S k', _::r) => list_index k' r _
+     end.
+*)
 
 (* TBD: Try some of these attempts at making the lookup stuff more generic:
 
@@ -139,18 +334,20 @@ Definition ty_xrect_plus
       into a mess that I can't fold back up, so I'm not using it. *)
 
 Definition subst_ugly (x:id) (s:tm) :tm -> tm := 
-  tm_xrect (fun _ => tm) (fun _ => list def)
+  tm_xrect (fun _ => tm) (fun _ => def) (fun _ => list def)
     ttrue                                               (* ttrue *)
     tfalse                                              (* tfalse *)
     (fun y => if eq_id_dec x y then s else (tvar y))    (* tvar y *)
-    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                 (* tapp t1 t2 *)
     (fun y T t1 mt1 =>                                  (* tabs y T t1 *)
        tabs y T (if eq_id_dec x y then t1 else mt1))
+    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                 (* tapp t1 t2 *)
     (fun r mr => trcd mr)                               (* trcd r *)
-      (nil)                                               (* nil *)
-      (fun i t r mt mr => (Fv i mt) :: mr)                (* cons i t r *)
     (fun t1 mt1 i => tproj mt1 i)                       (* tproj t1 i *)
     (fun tb mtb tt mtt te mte => tif mtb mtt mte)       (* tif tb tt te *)
+    (fun F mF t mt => tlet mF mt)       (* tlet F t (wrong) *)
+    (fun x t mt => Fv x mt)
+    (nil)                                               (* nil *)
+    (fun F mF Fs mFs => mF :: mFs)                      (* cons F Fs *)
     .
 
 
@@ -166,13 +363,15 @@ Definition tm_rect_nest_map
   (ftrue : tm)
   (ffalse : tm)
   (fvar : id -> tm)
-  (fapp : tm -> tm -> tm -> tm -> tm)
   (fabs : id -> ty ->  tm -> tm -> tm)
+  (fapp : tm -> tm -> tm -> tm -> tm)
   (fproj : tm -> tm -> id -> tm)
   (fif : tm -> tm -> tm -> tm -> tm -> tm -> tm)
+  (flet : def -> def -> tm -> tm -> tm)
  := tm_xrect
-      (fun _ => tm)  (fun _ => list def) ftrue ffalse fvar fapp fabs
-      (fun r mr => trcd mr) nil (fun i t r mt mr => (Fv i mt) :: mr) fproj fif.
+      (fun _ => tm) (fun _ => def) (fun _ => list def) 
+      ftrue ffalse fvar fabs fapp (fun r mr => trcd mr) fproj fif flet
+       (fun x t mt => Fv x mt) nil (fun F mF Fs mFs => mF :: mFs) .
 
 
 Definition subst'' (x:id) (s:tm) : tm -> tm := 
@@ -180,10 +379,11 @@ Definition subst'' (x:id) (s:tm) : tm -> tm :=
     ttrue
     tfalse
     (fun y => if eq_id_dec x y then s else (tvar y))
-    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)
     (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1))
+    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)
     (fun t1 mt1 i => tproj mt1 i)
-    (fun tb mtb tt mtt te mte => tif mtb mtt mte).
+    (fun tb mtb tt mtt te mte => tif mtb mtt mte)
+    (fun F mF t mt => tlet mF mt).
 
 (*
 Example subst''_ok :substf_ok subst''.
@@ -191,17 +391,19 @@ Proof. unfold substf_ok. repeat split. Qed.
 *)
 
 Definition tm_id : tm -> tm := 
-  tm_xrect (fun _ => tm) (fun _ => list def)
+  tm_xrect (fun _ => tm) (fun _ => def) (fun _ => list def)
     ttrue 
     tfalse
     (fun y => tvar y)
-    (fun t1 mt1 t2 mt2 => tapp t1 t2)
     (fun y T t1 mt1 =>  tabs y T t1)
+    (fun t1 mt1 t2 mt2 => tapp t1 t2)
     (fun r mr => trcd r)
-    (nil)
-    (fun i t r mt mr => (Fv i t) :: r)
     (fun t1 mt1 i => tproj t1 i)
-    (fun tb mtb tt mtt te mte => tif tb tt te).
+    (fun tb mtb tt mtt te mte => tif tb tt te)
+    (fun F mF t mt => tlet F t)
+    (fun x t mt => Fv x t)
+    (nil)
+    (fun F mF Fs mFs => F :: Fs).
 (*
 Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
     =  (tapp (tvar f) (tvar a)).

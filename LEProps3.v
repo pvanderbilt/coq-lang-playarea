@@ -11,9 +11,8 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef LEval.
-Import P3Common LDEF LEVAL.
+Import Common LDef LEval.
 
-Module LEProps3.
 
 (* ###################################################################### *)
 
@@ -33,35 +32,38 @@ Reserved Notation "t '/' g '=>:' T" (at level 40, g at level 39).
 
     However, this isn't accepted because of a "Non strictly positive occurrence" error
     due to [va ::: T1 ] being to the left of an implication.
-    Below I provide lemmas that fake this behavior, and it seems that the soundness proof goes through.
+    Below I provide lemmas that fake this behavior, 
+    and it seems that the soundness proof goes through.
 
     Some alternative that I've tried:
 
-     -  [(exists Gf , gf :::* Gf /\ extend Gf xf T1 |- tb \in T2) ->]#<br/>#
+     -  [(exists Gf , gf :::* Gf /\ extend Gf xf T1 |-- tb \in T2) ->]#<br/>#
         [    vabs xf tb gf ::: TArrow T1 T2]
 
         This is accepted but gets to a state in the [tapp] case where the context has:
             - [Hv2t : v2 ::: T11]
             - [Hevf : evalF tb (acons xf v2 gf) n' = erf]
             - [HGgf : gf :::* Gf]
-            - [Htbt : extend Gf xf T11 |- tb \in T]
+            - [Htbt : extend Gf xf T11 |-- tb \in T]
         It seems that this needs the inductive hypothesis from the [tabs] case.
 
-     -  [(exists Gf, gf :::* Gf /\ Gf |- (tabs xf T1 tb) \in TArrow T1 T2 ) -> ...]
+     -  [(exists Gf, gf :::* Gf /\ Gf |-- (tabs xf T1 tb) \in TArrow T1 T2 ) -> ...]
 
         This is accepted but is similar to the one above.
 
-     -  [( forall ta G g va n, G |- ta \in T1 ->  g :::* G -> ]#<br/>#
+     -  [( forall ta G g va n, G |-- ta \in T1 ->  g :::* G -> ]#<br/>#
           [    evalF ta g n = efr_normal va -> ]#<br/>#
           [    tb / (acons xf va gf) =>: T2 ) -> ...]
 
         This is not accepted because of the [gf :::* Gf ]clause. 
-        This makes sense as the first line is another way to say [va ::: T1] (given soundness).
+        This makes sense as the first line is another way to say [va ::: T1] 
+        (given soundness).
 *)
 
 Inductive value_has_type : evalue -> ty -> Prop :=
   | TV_Abs : forall xf tb gf T1 T2,
-     (* As discussed above, I want the following premise, but it's rejected as a "Non strictly positive occurrence".
+     (* As discussed above, I want the following premise, 
+        but it's rejected as a "Non strictly positive occurrence".
          ( forall va,  va ::: T1 -> tb / (acons xf va gf) =>: T2 ) ->
       *)
                vabs xf tb gf ::: TArrow T1 T2
@@ -126,11 +128,11 @@ Qed.
 
 
 Lemma ctx_tvar_then_some : forall G x T,
-  G |- (tvar x) \in T -> lookup_vdecl x G = Some T.
+  G |-- (tvar x) \in T -> lookup_vdecl x G = Some T.
 Proof. introv H. inversion H. auto. Qed.
 
 Lemma ctx_tvar_then_alookup : forall G x T g,
-  G |- (tvar x) \in T -> g :::* G -> 
+  G |-- (tvar x) \in T -> g :::* G -> 
     exists v, alookup x g = Some v /\ v ::: T.
 Proof. 
   introv HG Hg. apply (ctxts_agree_on_lookup x G g T Hg). 
@@ -142,7 +144,7 @@ Qed.
 (** ** Lemma for reasoning about  (tvar x) / g =>: T. *)
 
 Lemma ctx_tvar_then_evalsto : forall G x T g,
-  G |- (tvar x) \in T -> g :::* G -> (tvar x) / g =>: T.
+  G |-- (tvar x) \in T -> g :::* G -> (tvar x) / g =>: T.
 Proof. 
   introv HG Hg. destruct (ctx_tvar_then_alookup G x T g HG Hg) as [v [Hl Hv]]. 
   apply TVE. intro n. destruct n as [ | n' ].
@@ -172,14 +174,18 @@ Lemma let_val :
   forall t1 g n' (f : evalue -> ef_return) erf T1 T2,
     (LETRT x <== evalF t1 g n' IN f x) = erf ->
     t1 / g =>: T1 -> 
-    (forall v1 er1, efr_normal v1 = er1 -> v1 ::: T1 -> forall er2, (f v1) = er2 -> result_ok er2 T2) 
+    (forall v1 er1, 
+       efr_normal v1 = er1 -> 
+       v1 ::: T1 -> 
+       forall er2, (f v1) = er2 -> result_ok er2 T2) 
           -> result_ok erf T2.
 Proof. 
     introv HLet Heval Hin. inverts Heval as Hok1. specialize (Hok1 n').
     remember (evalF t1 g n') as er1. 
     inversion Hok1 as [T1' Her1eq HT1eq | v1 T1' Hv1 Her1eq HT1eq]. 
       rewrite <- Her1eq in HLet. subst erf. apply TR_NG .
-      rewrite <- Her1eq in HLet. clear Heqer1. subst erf. apply (Hin v1 er1 Her1eq Hv1 (f v1) eq_refl).
+      rewrite <- Her1eq in HLet. clear Heqer1. subst erf. 
+        apply (Hin v1 er1 Her1eq Hv1 (f v1) eq_refl).
 Qed.
 
 
@@ -188,40 +194,31 @@ Qed.
 
 Theorem evalF_soundness : 
   forall (t : tm) (G : context) (T : ty) (g : rctx),
-    G |- t \in T ->  g :::* G -> t / g  =>: T.
+    G |-- t \in T ->  g :::* G -> t / g  =>: T.
 Proof.
-  (* introv Hty HGg. generalize dependent G. generalize dependent g. generalize dependent T. *)
-  t_cases (induction t as [ | | x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]) Case; introv Hty HGg.
+(* new form but doesn't work since the "*" relations
+   have not been defined. 
+  set (Q:=fun Fs : list def =>
+          forall (G : context) (Ls : list decl) (g : rctx),
+            G |-- Fs *\in Ls ->  g :::* G -> Fs / g  =>:* Ls).
+  tm_xind_tactic t Q Case; 
+    introv Hty HGg; inverts Hty; 
+*)
+  t_cases (induction t as 
+              [ | | x | x Tx tb | t1 ? t2 ? | | | ti ? tt ? te ? | ]
+          ) Case; introv Hty HGg.
 
   Case "ttrue".
     inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. apply TR_Norm. apply TV_True.
+    apply evalF_parts. intros n' er Hev. simpl in Hev. 
+    rewrite <- Hev. apply TR_Norm. apply TV_True.
 
   Case "tfalse".
     inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. auto.
+    apply evalF_parts. intros n' er Hev. simpl in Hev. 
+    rewrite <- Hev. auto.
 
   Case "tvar". apply (ctx_tvar_then_evalsto G x T g Hty HGg).
-
-  Case "tapp".
-    inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev.
-    (* use the IHs to get [Ht1 : t1 / g =>: TArrow T11 T] and [Ht2 : t2 / g =>: T11].  *)
-    assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
-    assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
-    (* use the [let_val] lemmas with Ht1 and Ht2 to decompose the two LETRT forms *)
-    apply (let_val t1 g n' _ _ (TArrow T1 T) T Hev Ht1). clear Hev Ht1. 
-    intros v1 er1 Hv1 Hv1t erL2 HevL2.
-    apply (let_val t2 g n' _ _ _ _ HevL2 Ht2). clear HevL2 Ht2.
-    intros v2 er2 Hv2 Hv2t erf Hevf.
-    (* Here:   [Hv1t : v1 ::: TArrow T11 T] & [Hv2t : v2 ::: T11] & [erf = match v1 with ... end]. *)
-    (* Invert Hv1t to get at the structure of v1 which gives [erf = evalF tb (aextend xf v2 gf) n'].  
-        However, with the TV_Abs definition above, there is no information about tb, so we can't proceed.
-        Instead, use the fake inversion lemma to see that it goes through. *)
-    assert (Hex := (fake_vht_arrow_inversion _ _ _ Hv1t)); clear Hv1t;  (* BOGUS *)
-    inversion Hex as [xf [ tb [ gf [ Hv1eq Hva]]]]; subst v1; clear Hex.
-    specialize (Hva v2 Hv2t). clear Hv2t.
-    inverts Hva as Hok2. specialize (Hok2 n'). rewrite Hevf in Hok2. apply Hok2.
 
   Case "tabs". 
     inverts Hty.
@@ -234,6 +231,29 @@ Proof.
     (* use the IH on H4 and TC_Cons with Hva. *)
     apply (IHtb _ _ _ H4). apply (TC_cons _ _ _ va _ HGg Hva).
     (* apply (fun va Hva => IHtb _ _ _ H4 (TC_cons _ _ _ va _ HGg Hva)). *)
+
+  Case "tapp".
+    inverts Hty.
+    apply evalF_parts. intros n' er Hev. simpl in Hev.
+    (* use the IHs to get [Ht1 : t1 / g =>: TArrow T11 T] & [Ht2 : t2 / g =>: T11].  *)
+    assert (Ht1 := IHt1 _ _ _ H2 HGg); clear IHt1 H2.
+    assert (Ht2 := IHt2 _ _ _ H4 HGg); clear IHt2 H4.
+    (* use the [let_val] lemmas with Ht1 and Ht2 to decompose the two LETRT forms *)
+    apply (let_val t1 g n' _ _ (TArrow T1 T) T Hev Ht1). clear Hev Ht1. 
+    intros v1 er1 Hv1 Hv1t erL2 HevL2.
+    apply (let_val t2 g n' _ _ _ _ HevL2 Ht2). clear HevL2 Ht2.
+    intros v2 er2 Hv2 Hv2t erf Hevf.
+    (* Here: [Hv1t : v1 ::: TArrow T11 T] & [Hv2t : v2 ::: T11] 
+             & [erf = match v1 with ... end]. *)
+    (* Invert Hv1t to get at the structure of v1 which gives 
+        [erf = evalF tb (aextend xf v2 gf) n'].  
+        However, with the TV_Abs definition above, 
+        there is no information about tb, so we can't proceed.
+        Instead, use the fake inversion lemma to see that it goes through. *)
+    assert (Hex := (fake_vht_arrow_inversion _ _ _ Hv1t)); clear Hv1t;  (* BOGUS *)
+    inversion Hex as [xf [ tb [ gf [ Hv1eq Hva]]]]; subst v1; clear Hex.
+    specialize (Hva v2 Hv2t). clear Hv2t.
+    inverts Hva as Hok2. specialize (Hok2 n'). rewrite Hevf in Hok2. apply Hok2.
 
   Case "trcd".
     admit. (* TBD *)
@@ -254,6 +274,8 @@ Proof.
       SCase "efr_normal vb". subst TBool'. rewrite <- Hei in Hev; clear Hei. inverts Hvbt.
         SSCase "vtrue". inverts Htt as Hokt.  specialize (Hokt n'). rewrite Hev in Hokt. apply Hokt.
         SSCase "vfalse". inverts Hte as Hoke.  specialize (Hoke n'). rewrite Hev in Hoke. apply Hoke.
-Qed.
 
-End LEProps3.
+  Case "tlet".
+    admit. (* TBD *)
+
+Qed.

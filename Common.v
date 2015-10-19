@@ -5,8 +5,6 @@ Load Init.
 Require Export SfLib.
 Require Import LibTactics.
 
-Module P3Common.
-
 (** ** Association lists (alists) *)
 
 Definition alist (T : Type) : Type := list (id * T).
@@ -51,4 +49,3 @@ Qed.
 
 Hint Unfold aextend.
 
-End P3Common.

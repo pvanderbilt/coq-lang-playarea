@@ -8,9 +8,7 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef.
-Import P3Common LDEF.
-
-Module LEVAL.
+Import Common LDef.
 
 (* ###################################################################### *)
 (** ** Values (type [evalue]) *)
@@ -35,18 +33,18 @@ Inductive eval : tm -> rctx -> evalue -> Prop :=
         tvar x / c || v
   | E_Abs : forall x T t c,
         tabs x T t / c || vabs x t c
-  | E_App : forall (t1 t2 : tm) (v1 v2 v : evalue) (c : rctx),
+  | E_App : forall t1 t2 v1 v2 c v,
       t1 / c || v1 ->
       t2 / c || v2 ->
       apply v1 v2 v ->
         tapp t1 t2 / c || v
   | E_Rcd : forall Fs c bs, 
       Fs / c >>* bs -> 
-        (trcd Fs) / c || (vrcd bs)
+        trcd Fs / c || vrcd bs
   | E_Proj : forall t c bs x v, 
-     t / c || (vrcd bs) -> 
+     t / c || vrcd bs -> 
      alookup x bs = Some v -> 
-       (tproj t x) / c || v
+       tproj t x / c || v
   | E_True : forall c,
         ttrue / c || vtrue
   | E_False : forall c,
@@ -55,6 +53,10 @@ Inductive eval : tm -> rctx -> evalue -> Prop :=
       tb / c || vb ->
       eval_bool vb tt te c v ->
         tif tb tt te / c || v
+  | E_Let : forall x1 t1 t2 c v1 v,
+      t1 / c || v1 ->
+      t2 / (aextend x1 v1 c) || v ->
+        tlet (Fv x1 t1) t2 / c || v
 
 with apply : evalue -> evalue -> evalue -> Prop :=
   | EA : forall xf tf cf va vr,
@@ -91,15 +93,24 @@ Hint Constructors eval apply eval_bool exec_list.
 (* ###################################################################### *)
 (**  ** The evalF function for big-step semantics *)
 
+
+Definition vbinding := prod id evalue.
+Definition vlist := list vbinding.
+
 (** *** Return types *)
 
-Inductive ef_return_g {Tr : Type} :  Type :=
-  | efr_normal : Tr -> ef_return_g
-  | efr_nogas : ef_return_g
-  | efr_stuck : ef_return_g .
+Inductive ef_return_g (Tr : Type) :  Type :=
+  | efr_normal : Tr -> ef_return_g Tr
+  | efr_nogas : ef_return_g Tr
+  | efr_stuck : ef_return_g Tr.
 
-Definition ef_return := ef_return_g (Tr := evalue).
-Definition xf_return := ef_return_g (Tr := alist evalue).
+Arguments efr_normal [Tr] _.
+Arguments efr_nogas [Tr].
+Arguments efr_stuck [Tr].
+
+Definition ef_return := ef_return_g evalue.
+Definition bf_return := ef_return_g vbinding.
+Definition xf_return := ef_return_g (alist evalue).
 
 (*
 Inductive ef_return : Type :=
@@ -125,19 +136,26 @@ Notation "'LETRT' x <== er1 'IN' er2"
 
 (** *** Function [evalF] *)
 
-Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
+Fixpoint evalF (t : tm) (g : rctx) (gas : nat) {struct gas} : ef_return :=
   match gas with
     | O => efr_nogas
     | S gas' => 
-      let fix execF_list (Fs : list def) : xf_return :=
+      let execF_def (F : def)  (g : rctx) : bf_return :=
+        match F with
+          | (Fv x t) =>
+              LETRT v <== evalF t g gas' IN efr_normal (x, v)
+        end
+      in let fix execF_pdefs (Fs : list def)  (g : rctx) : xf_return :=
         match Fs with
           | nil => efr_normal nil
-          | (Fv x t) :: Fs' =>
-              LETRT v <== evalF t g gas' IN
-                LETRT bs' <== execF_list Fs' IN 
-                  efr_normal (aextend x v bs')
+          | F :: Fs' =>
+              LETRT b <== execF_def F g IN
+                LETRT bs' <== execF_pdefs Fs' g IN 
+                  efr_normal (b :: bs')
         end
       in match t with
+        | ttrue => efr_normal vtrue
+        | tfalse => efr_normal vfalse
         | tvar x => 
             match alookup x g with 
               | Some v => efr_normal v 
@@ -152,7 +170,7 @@ Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
                   | _ => efr_stuck
                 end
         | trcd Fs => 
-            LETRT bs <== execF_list Fs IN efr_normal (vrcd bs)
+            LETRT bs <== execF_pdefs Fs g IN efr_normal (vrcd bs)
         | tproj t x => 
             LETRT v <== evalF t g gas' IN
               match v with
@@ -162,8 +180,6 @@ Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
                              end
                 | _ => efr_stuck
               end
-        | ttrue => efr_normal vtrue
-        | tfalse => efr_normal vfalse
         | tif tb t1 t2 => 
             LETRT vb <== evalF tb g gas' IN
               match vb with
@@ -171,32 +187,52 @@ Fixpoint evalF (t : tm) (g : rctx) (gas : nat) : ef_return :=
                 | vfalse => evalF t2 g gas'
                 | _ => efr_stuck
               end
-
+        | tlet F t2 => 
+            LETRT b <== execF_def F g IN
+              evalF t2 (b :: g) gas'
       end
   end.
 
-(** Pull out [execF_list] and prove that it's equivalent to the inner fixpoint. *)
+(** Pull out [execF_pdefs] and prove that it's equivalent to the inner fixpoint. *)
 
-Fixpoint execF_list (Fs : list def) (g : rctx) (gas' : nat) : xf_return := 
-      match Fs with
-        | nil => efr_normal nil
-        | (Fv x t) :: Fs' =>
-            LETRT v <== evalF t g gas' IN
-              LETRT bs' <== execF_list Fs' g gas' IN 
-                efr_normal (aextend x v bs')
+Definition execF_def (F : def) (g : rctx) (gas' : nat) : bf_return := 
+      match F with
+        | (Fv x t) =>
+            LETRT v <== evalF t g gas' IN efr_normal (x, v)
       end.
 
-Lemma execF_list_eq :
+Fixpoint execF_pdefs (Fs : list def) (g : rctx) (gas' : nat) : xf_return := 
+      match Fs with
+        | nil => efr_normal nil
+        | F :: Fs' =>
+              LETRT b <== execF_def F g gas' IN
+                LETRT bs' <== execF_pdefs Fs' g gas' IN 
+                  efr_normal (b :: bs')
+      end.
+
+Lemma execF_def_eq :
+  forall (F : def) (g : rctx) (n' : nat),
+    execF_def F g n' = 
+    (match F with
+        | Fv x t => LETRT v <== evalF t g n' IN efr_normal (x, v)
+      end).
+Proof.
+  intros. reflexivity.
+Qed.
+
+Lemma execF_pdefs_eq :
   forall (Fs : list def) (g : rctx) (n' : nat),
-    execF_list Fs g n' = 
-    ((fix execF_list (Fs0 : list def) : xf_return :=
+    execF_pdefs Fs g n' = 
+    ((fix execF_pdefs (Fs0 : list def) (g : rctx) : xf_return :=
            match Fs0 with
            | nil => efr_normal nil
-           | Fv x t :: Fs' =>
-               LETRT v <== evalF t g n'
-               IN LETRT bs' <== execF_list Fs'
-                  IN efr_normal (aextend x v bs')
-           end) Fs).
+           |  F :: Fs' =>
+               LETRT b <==
+                 match F with
+                   | Fv x t => LETRT v <== evalF t g n' IN efr_normal (x, v)
+                 end
+               IN LETRT bs' <== execF_pdefs Fs' g IN efr_normal (b :: bs')
+           end) Fs g).
 Proof.
   intros. induction Fs as [ |F Fs'].
     Case "Fs=[]". reflexivity.
@@ -225,17 +261,7 @@ with evalF' (t : tm) (e : rctx) (gas' : nat) {struct gas'} : ef_return :=
               | vabs tx tf te => evalF tf (aextend tx v2 te) gas'
               | _ => efr_stuck
             end
-    | tabs x T t => efr_normal (vabs x t e)
-    | ttrue => efr_normal vtrue
-    | tfalse => efr_normal vfalse
-    | tif tb t1 t2 => 
-        LETRT vb <== evalF tb g gas' IN
-          match vb with
-            | vtrue => evalF t1 g gas'
-            | vfalse => evalF t2 g gas'
-            | _ => efr_stuck
-          end
+    | [...]
   end.
 *)
 
-End LEVAL.

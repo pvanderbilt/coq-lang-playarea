@@ -2,8 +2,6 @@
     to help with theorem proving.  It was motivated by some of the proofs is SF's
     Hoare.v.*)
 
-Module PVUTILS.
-
 (* For the examples: *)
 Require Import Arith.
 
@@ -125,7 +123,6 @@ Proof.
       apply (gt_irrefl 1 HC).
 Qed.
 
-
 (** ** Tactic [simplify_term_in]
         Given a hypothesis [H:P] where [P] contains a term [t],
         [simplify_term_in t H] creates a subgoal [t=?n] 
@@ -169,6 +166,56 @@ Proof.
     inversion HC.
 Qed.
 
+(** ** Tactic [simplify_term_in_goal]
+        Given a goal [R] which contains a term [t],
+        [simplify_term_in_goal t] creates a subgoal [t=?n] 
+        (for some "existential" variable [?n]) 
+        which allows [t] to be simplified
+        or evaluated (by [reflexivity]) in isolation.  
+        Once completed, the tactic returns to the goal
+        with [t] replaced by its simplification.
+*)
+
+(**  The theorem that drives the tactic: *)
+
+Theorem TH_simplify_term_in_goal : 
+  forall (T : Type) (x : T) (R : T -> Prop),
+    (exists z, x = z /\ R z) -> R x.
+Proof.
+  intros T x R Hex.
+  inversion Hex as  [z [Hxz HxR]]; clear Hex.
+  rewrite Hxz. apply HxR.
+Qed.
+
+Example stig_ex1:
+  forall x,
+    (forall y, y + y = 2*y) ->
+    (5 * ((x+0) + x)) = 10*x.
+Proof.
+  intros x Heq.
+  apply (TH_simplify_term_in_goal _ (x+0+x) (fun t => 5*t = 10*x)).
+  eexists. split. assert (H0: x+0=x) by apply plus_0_r.
+  rewrite H0. apply Heq.
+  apply mult_assoc.
+Qed.
+
+(**  The tactic definition: *)
+
+Ltac simplify_term_in_goal t R :=
+  let Ht := fresh "H_sti_eq" in
+  apply (TH_simplify_term_in_goal _ t R ); eexists; split.
+
+Example stig_ex1t:
+  forall x,
+    (forall y, y + y = 2*y) ->
+    (5 * ((x+0) + x)) = 10*x.
+Proof.
+  intros x Heq. simplify_term_in_goal (x+0+x) (fun t => 5*t = 10*x).
+    assert (H0: x+0=x) by apply plus_0_r. rewrite H0. apply Heq.
+    apply mult_assoc.
+Qed.
+
+
 (* An example of  using adapt_implication with remember.  
     BUT Doesn't do anything good.
 Example MP2_ex2'' : ~ forall x: nat, x>=1 -> x*x  > x.
@@ -194,6 +241,4 @@ Example MP2_ex1a' : ~ ( 1 = 1*1 -> 1 > 1 ).
 Proof. intro HC. sh.split_hyp' HC. auto. apply (gt_irrefl 1 HC). Qed.
 
 *)
-
-End PVUTILS.
 

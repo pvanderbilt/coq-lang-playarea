@@ -9,7 +9,7 @@ Require Export SfLib.
 Require Import LibTactics.
 
 Require Export Common LDef LEval.
-Import P3Common LDEF LEVAL.
+Import Common LDef LEval.
 
 (* ###################################################################### *)
 (** ** Some definitions to use in testing *)

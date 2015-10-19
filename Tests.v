@@ -4,7 +4,7 @@
 
 Load Init.
 Require Export LDef.
-Import LDEF.
+Import LDef.
 
 (** *** Definitions *)
 
@@ -161,7 +161,7 @@ Qed.
 (** *** Examples *)
 
 Example typing_example_1 :
-  empty |- tabs x TBool (tvar x) \in TArrow TBool TBool.
+  empty |-- tabs x TBool (tvar x) \in TArrow TBool TBool.
 Proof.
   apply T_Abs. apply T_Var. reflexivity.  Qed.
 
@@ -169,16 +169,16 @@ Proof.
     database, auto can actually solve this one immediately. *)
 
 Example typing_example_1' :
-  empty |- tabs x TBool (tvar x) \in TArrow TBool TBool.
+  empty |-- tabs x TBool (tvar x) \in TArrow TBool TBool.
 Proof. auto.  Qed.
 
 (** Another example:
-     empty |- \x:A. \y:A->A. y (y x)) 
+     empty |-- \x:A. \y:A->A. y (y x)) 
            \in A -> (A->A) -> A.
 *)
 
 Example typing_example_2 :
-  empty |-
+  empty |--
     (tabs x TBool
        (tabs y (TArrow TBool TBool)
           (tapp (tvar y) (tapp (tvar y) (tvar x))))) \in
@@ -195,7 +195,7 @@ Qed.
     [eapply]. *)
 
 Example typing_example_2_full :
-  empty |-
+  empty |--
     (tabs x TBool
        (tabs y (TArrow TBool TBool)
           (tapp (tvar y) (tapp (tvar y) (tvar x))))) \in
@@ -225,7 +225,7 @@ Qed.
 
 Example typing_example_2_full' :
   forall (ctxt : context),
-  ctxt |-
+  ctxt |--
     (tabs x TBool
        (tabs y (TArrow TBool TBool)
           (tapp (tvar y) (tapp (tvar y) (tvar x))))) \in
@@ -244,14 +244,14 @@ Qed.
 (** **** Exercise: 2 stars (typing_example_3)  *)
 (** Formally prove the following typing derivation holds: *)
 (** 
-   empty |- \x:Bool->B. \y:Bool->Bool. \z:Bool.
+   empty |-- \x:Bool->B. \y:Bool->Bool. \z:Bool.
                y (x z) 
          \in T.
 *)
 
 Example typing_example_3 :
   exists T, 
-    empty |-
+    empty |--
       (tabs x (TArrow TBool TBool)
          (tabs y (TArrow TBool TBool)
             (tabs z TBool
@@ -272,12 +272,12 @@ Qed.
     formally check that there is no typing derivation assigning a type
     to the term [\x:Bool. \y:Bool, x y] -- i.e.,
     ~ exists T,
-        empty |- \x:Bool. \y:Bool, x y : T.
+        empty |-- \x:Bool. \y:Bool, x y : T.
 *)
 
 Example typing_nonexample_1 :
   ~ exists T,
-      empty |- 
+      empty |-- 
         (tabs x TBool
             (tabs y TBool
                (tapp (tvar x) (tvar y)))) \in
@@ -297,12 +297,12 @@ Proof.
 
 (** (Exercie) Another nonexample:
     ~ (exists S, exists T,
-          empty |- \x:S. x x : T).
+          empty |-- \x:S. x x : T).
 *)
 
 Example typing_nonexample_3 :
   ~ (exists S, exists T,
-        empty |- 
+        empty |-- 
           (tabs x S
              (tapp (tvar x) (tvar x))) \in
           T).
