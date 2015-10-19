@@ -298,7 +298,7 @@ Proof with eauto 15.
   set (Q := fun r =>
       forall (RT : list decl) (Gamma : context),
         add_vdecl x U Gamma |- r *\in RT -> 
-        Gamma |- (subst_rcd x v r) *\in RT).
+        Gamma |- ([x:<=v]* r) *\in RT).
   tm_xind_tactic t Q Case; intros S Gamma Htypt; simpl; subst Q; inverts Htypt...
 
   Case "tvar".
@@ -364,13 +364,6 @@ Proof with eauto 15.
       intros z Hafi. unfold add_vdecl, lookup_vdecl.
       destruct (eq_id_dec y z)... 
       subst. rewrite neq_id...
-
-  Case "trcd". 
-    (* Due to having to define subst_rec within subst, 
-       the goal is in a form that doesn't match, so
-       we use a special lemma to get it back into a form
-       that eauto can handle. *)
-    rewrite <- (subst_rcd_eqv x v Fs)... 
 
   Case "trcons". (* TBD: Why doesn't this work automatically? *)
     apply TR_Cons...
