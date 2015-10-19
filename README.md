@@ -18,6 +18,9 @@ as defined in Coq and extends it in various ways:
 	Also changed the typing context to be a list of declarations.
 	See [LDef.v](LDef.v), [LProps.v](LProps.v), [LEval.v](LEval.v) and [LEProps.v](LEProps.v).
 
+- Also added a let-expression, `(let F in t)` where `F` is a definition and `t` is a term.
+  The result is the evaluation of `t` in the context extended by the result of executing `F`.
+
 To use this software:
 
 - Obtain the Coq interactive theorem prover [here](https://coq.inria.fr/download).

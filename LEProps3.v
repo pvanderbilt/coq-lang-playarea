@@ -37,21 +37,21 @@ Reserved Notation "t '/' g '=>:' T" (at level 40, g at level 39).
 
     Some alternative that I've tried:
 
-     -  [(exists Gf , gf :::* Gf /\ extend Gf xf T1 |- tb \in T2) ->]#<br/>#
+     -  [(exists Gf , gf :::* Gf /\ extend Gf xf T1 |-- tb \in T2) ->]#<br/>#
         [    vabs xf tb gf ::: TArrow T1 T2]
 
         This is accepted but gets to a state in the [tapp] case where the context has:
             - [Hv2t : v2 ::: T11]
             - [Hevf : evalF tb (acons xf v2 gf) n' = erf]
             - [HGgf : gf :::* Gf]
-            - [Htbt : extend Gf xf T11 |- tb \in T]
+            - [Htbt : extend Gf xf T11 |-- tb \in T]
         It seems that this needs the inductive hypothesis from the [tabs] case.
 
-     -  [(exists Gf, gf :::* Gf /\ Gf |- (tabs xf T1 tb) \in TArrow T1 T2 ) -> ...]
+     -  [(exists Gf, gf :::* Gf /\ Gf |-- (tabs xf T1 tb) \in TArrow T1 T2 ) -> ...]
 
         This is accepted but is similar to the one above.
 
-     -  [( forall ta G g va n, G |- ta \in T1 ->  g :::* G -> ]#<br/>#
+     -  [( forall ta G g va n, G |-- ta \in T1 ->  g :::* G -> ]#<br/>#
           [    evalF ta g n = efr_normal va -> ]#<br/>#
           [    tb / (acons xf va gf) =>: T2 ) -> ...]
 
@@ -128,11 +128,11 @@ Qed.
 
 
 Lemma ctx_tvar_then_some : forall G x T,
-  G |- (tvar x) \in T -> lookup_vdecl x G = Some T.
+  G |-- (tvar x) \in T -> lookup_vdecl x G = Some T.
 Proof. introv H. inversion H. auto. Qed.
 
 Lemma ctx_tvar_then_alookup : forall G x T g,
-  G |- (tvar x) \in T -> g :::* G -> 
+  G |-- (tvar x) \in T -> g :::* G -> 
     exists v, alookup x g = Some v /\ v ::: T.
 Proof. 
   introv HG Hg. apply (ctxts_agree_on_lookup x G g T Hg). 
@@ -144,7 +144,7 @@ Qed.
 (** ** Lemma for reasoning about  (tvar x) / g =>: T. *)
 
 Lemma ctx_tvar_then_evalsto : forall G x T g,
-  G |- (tvar x) \in T -> g :::* G -> (tvar x) / g =>: T.
+  G |-- (tvar x) \in T -> g :::* G -> (tvar x) / g =>: T.
 Proof. 
   introv HG Hg. destruct (ctx_tvar_then_alookup G x T g HG Hg) as [v [Hl Hv]]. 
   apply TVE. intro n. destruct n as [ | n' ].
@@ -194,18 +194,18 @@ Qed.
 
 Theorem evalF_soundness : 
   forall (t : tm) (G : context) (T : ty) (g : rctx),
-    G |- t \in T ->  g :::* G -> t / g  =>: T.
+    G |-- t \in T ->  g :::* G -> t / g  =>: T.
 Proof.
 (* new form but doesn't work since the "*" relations
    have not been defined. 
   set (Q:=fun Fs : list def =>
           forall (G : context) (Ls : list decl) (g : rctx),
-            G |- Fs *\in Ls ->  g :::* G -> Fs / g  =>:* Ls).
+            G |-- Fs *\in Ls ->  g :::* G -> Fs / g  =>:* Ls).
   tm_xind_tactic t Q Case; 
     introv Hty HGg; inverts Hty; 
 *)
   t_cases (induction t as 
-              [ | | x | t1 ? t2 ? | x Tx tb | | | ti ? tt ? te ? ]
+              [ | | x | x Tx tb | t1 ? t2 ? | | | ti ? tt ? te ? | ]
           ) Case; introv Hty HGg.
 
   Case "ttrue".
@@ -219,6 +219,18 @@ Proof.
     rewrite <- Hev. auto.
 
   Case "tvar". apply (ctx_tvar_then_evalsto G x T g Hty HGg).
+
+  Case "tabs". 
+    inverts Hty.
+    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. clear Hev. apply TR_Norm.
+    (* At this point, the goal is [vabs x tb g ::: TArrow Tx T12].
+        Given the current TV_Abs, [apply TV_Abs] works.  However, it doesn't use the IH.
+        We use the fake_TV_Abs lemma to show that the desired TV_Abs definition would work. *)
+    apply fake_TV_Abs.   (* BOGUS *)
+    intros va Hva.
+    (* use the IH on H4 and TC_Cons with Hva. *)
+    apply (IHtb _ _ _ H4). apply (TC_cons _ _ _ va _ HGg Hva).
+    (* apply (fun va Hva => IHtb _ _ _ H4 (TC_cons _ _ _ va _ HGg Hva)). *)
 
   Case "tapp".
     inverts Hty.
@@ -243,18 +255,6 @@ Proof.
     specialize (Hva v2 Hv2t). clear Hv2t.
     inverts Hva as Hok2. specialize (Hok2 n'). rewrite Hevf in Hok2. apply Hok2.
 
-  Case "tabs". 
-    inverts Hty.
-    apply evalF_parts. intros n' er Hev. simpl in Hev. rewrite <- Hev. clear Hev. apply TR_Norm.
-    (* At this point, the goal is [vabs x tb g ::: TArrow Tx T12].
-        Given the current TV_Abs, [apply TV_Abs] works.  However, it doesn't use the IH.
-        We use the fake_TV_Abs lemma to show that the desired TV_Abs definition would work. *)
-    apply fake_TV_Abs.   (* BOGUS *)
-    intros va Hva.
-    (* use the IH on H4 and TC_Cons with Hva. *)
-    apply (IHtb _ _ _ H4). apply (TC_cons _ _ _ va _ HGg Hva).
-    (* apply (fun va Hva => IHtb _ _ _ H4 (TC_cons _ _ _ va _ HGg Hva)). *)
-
   Case "trcd".
     admit. (* TBD *)
 
@@ -274,4 +274,8 @@ Proof.
       SCase "efr_normal vb". subst TBool'. rewrite <- Hei in Hev; clear Hei. inverts Hvbt.
         SSCase "vtrue". inverts Htt as Hokt.  specialize (Hokt n'). rewrite Hev in Hokt. apply Hokt.
         SSCase "vfalse". inverts Hte as Hoke.  specialize (Hoke n'). rewrite Hev in Hoke. apply Hoke.
+
+  Case "tlet".
+    admit. (* TBD *)
+
 Qed.

@@ -68,7 +68,7 @@ Proof. eauto. Qed.
 Hint Constructors has_type rcd_has_type.
 
 Lemma typing_example_2 : 
-  empty |- 
+  empty |-- 
     (tapp (tabs a (TRcd [(Lv i1 (TArrow A A)); (Lv i2 (TArrow B B))])
               (tproj (tvar a) i2))
             (trcd [(Fv i1 (tabs a A (tvar a))); (Fv i2 (tabs a B (tvar a)))]) )
@@ -82,8 +82,8 @@ Proof.
       eapply T_Var.  eapply lookup_add_vdecl_eq.
       reflexivity. 
     eapply T_Rcd.
-      eapply TR_Cons. eapply T_Abs. eapply T_Var. eapply lookup_add_vdecl_eq.
-      eapply TR_Cons. eapply T_Abs. eapply T_Var. eapply lookup_add_vdecl_eq.
+      eapply TR_Cons. apply F_V. eapply T_Abs. eapply T_Var. eapply lookup_add_vdecl_eq.
+      eapply TR_Cons. apply F_V. eapply T_Abs. eapply T_Var. eapply lookup_add_vdecl_eq.
       eapply TR_Nil.
 Qed.
 
@@ -92,20 +92,20 @@ Qed.
 
 Example typing_nonexample : 
   ~ exists T,
-      (add_vdecl a (TRcd (cons (Lv i2 (TArrow A A)) nil)) empty)  |-
+      (add_vdecl a (TRcd (cons (Lv i2 (TArrow A A)) nil)) empty)  |--
                (trcd (cons (Fv i1 (tabs a B (tvar a))) nil)) \in
                T.
-  (* no T | a : { i2 : A->A } |- { i1 = λ a:B . a } : T *)
+  (* no T | a : { i2 : A->A } |-- { i1 = λ a:B . a } : T *)
 Proof.
   (* FILL IN HERE *) Admitted.
 
 Example typing_nonexample_2 : forall y,
   ~ exists T,
-    (add_vdecl y A empty) |-
+    (add_vdecl y A empty) |--
            (tapp (tabs a (TRcd [(Lv i1 A)]) (tproj (tvar a) i1))
                  (trcd [(Fv i1 (tvar y)); (Fv i2 (tvar y))]) ) \in
            T.
-  (* forall y, ~ exists T, y : A |- (λ a : { i1 : A} . a.i1) { i1 = y; i2 = y } : T *)
+  (* forall y, ~ exists T, y : A |-- (λ a : { i1 : A} . a.i1) { i1 = y; i2 = y } : T *)
 Proof.
   (* FILL IN HERE *) Admitted.
 

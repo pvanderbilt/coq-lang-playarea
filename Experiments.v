@@ -139,18 +139,20 @@ Definition ty_xrect_plus
       into a mess that I can't fold back up, so I'm not using it. *)
 
 Definition subst_ugly (x:id) (s:tm) :tm -> tm := 
-  tm_xrect (fun _ => tm) (fun _ => list def)
+  tm_xrect (fun _ => tm) (fun _ => def) (fun _ => list def)
     ttrue                                               (* ttrue *)
     tfalse                                              (* tfalse *)
     (fun y => if eq_id_dec x y then s else (tvar y))    (* tvar y *)
-    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                 (* tapp t1 t2 *)
     (fun y T t1 mt1 =>                                  (* tabs y T t1 *)
        tabs y T (if eq_id_dec x y then t1 else mt1))
+    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)                 (* tapp t1 t2 *)
     (fun r mr => trcd mr)                               (* trcd r *)
-      (nil)                                               (* nil *)
-      (fun i t r mt mr => (Fv i mt) :: mr)                (* cons i t r *)
     (fun t1 mt1 i => tproj mt1 i)                       (* tproj t1 i *)
     (fun tb mtb tt mtt te mte => tif mtb mtt mte)       (* tif tb tt te *)
+    (fun F mF t mt => tlet mF mt)       (* tlet F t (wrong) *)
+    (fun x t mt => Fv x mt)
+    (nil)                                               (* nil *)
+    (fun F mF Fs mFs => mF :: mFs)                      (* cons F Fs *)
     .
 
 
@@ -166,13 +168,15 @@ Definition tm_rect_nest_map
   (ftrue : tm)
   (ffalse : tm)
   (fvar : id -> tm)
-  (fapp : tm -> tm -> tm -> tm -> tm)
   (fabs : id -> ty ->  tm -> tm -> tm)
+  (fapp : tm -> tm -> tm -> tm -> tm)
   (fproj : tm -> tm -> id -> tm)
   (fif : tm -> tm -> tm -> tm -> tm -> tm -> tm)
+  (flet : def -> def -> tm -> tm -> tm)
  := tm_xrect
-      (fun _ => tm)  (fun _ => list def) ftrue ffalse fvar fapp fabs
-      (fun r mr => trcd mr) nil (fun i t r mt mr => (Fv i mt) :: mr) fproj fif.
+      (fun _ => tm) (fun _ => def) (fun _ => list def) 
+      ftrue ffalse fvar fabs fapp (fun r mr => trcd mr) fproj fif flet
+       (fun x t mt => Fv x mt) nil (fun F mF Fs mFs => mF :: mFs) .
 
 
 Definition subst'' (x:id) (s:tm) : tm -> tm := 
@@ -180,10 +184,11 @@ Definition subst'' (x:id) (s:tm) : tm -> tm :=
     ttrue
     tfalse
     (fun y => if eq_id_dec x y then s else (tvar y))
-    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)
     (fun y T t1 mt1 =>  tabs y T (if eq_id_dec x y then t1 else mt1))
+    (fun t1 mt1 t2 mt2 => tapp mt1 mt2)
     (fun t1 mt1 i => tproj mt1 i)
-    (fun tb mtb tt mtt te mte => tif mtb mtt mte).
+    (fun tb mtb tt mtt te mte => tif mtb mtt mte)
+    (fun F mF t mt => tlet mF mt).
 
 (*
 Example subst''_ok :substf_ok subst''.
@@ -191,17 +196,19 @@ Proof. unfold substf_ok. repeat split. Qed.
 *)
 
 Definition tm_id : tm -> tm := 
-  tm_xrect (fun _ => tm) (fun _ => list def)
+  tm_xrect (fun _ => tm) (fun _ => def) (fun _ => list def)
     ttrue 
     tfalse
     (fun y => tvar y)
-    (fun t1 mt1 t2 mt2 => tapp t1 t2)
     (fun y T t1 mt1 =>  tabs y T t1)
+    (fun t1 mt1 t2 mt2 => tapp t1 t2)
     (fun r mr => trcd r)
-    (nil)
-    (fun i t r mt mr => (Fv i t) :: r)
     (fun t1 mt1 i => tproj t1 i)
-    (fun tb mtb tt mtt te mte => tif tb tt te).
+    (fun tb mtb tt mtt te mte => tif tb tt te)
+    (fun F mF t mt => tlet F t)
+    (fun x t mt => Fv x t)
+    (nil)
+    (fun F mF Fs mFs => F :: Fs).
 (*
 Example ex_id1 : (tm_id (tapp (tvar f) (tvar a)))
     =  (tapp (tvar f) (tvar a)).
